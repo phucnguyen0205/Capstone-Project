@@ -1,10 +1,11 @@
+import Link from "next/link";
 import { navTabs } from "@/lib/mock-data";
 import { Icon } from "@/components/ui/Icon";
 
 export function Navbar() {
   return (
     <header className="flex h-[72px] w-full shrink-0 items-center justify-between border-b border-[#242831] bg-[#111317] px-8">
-      <div className="flex items-center gap-2">
+      <Link href="/" className="flex items-center gap-2">
         <div
           className="flex size-9 items-center justify-center rounded-[18px]"
           style={{
@@ -26,13 +27,13 @@ export function Navbar() {
             App
           </span>
         </p>
-      </div>
+      </Link>
 
       <nav className="flex items-center gap-8">
         {navTabs.map((tab) => (
-          <button
+          <Link
             key={tab.id}
-            type="button"
+            href={tab.id === "groups" ? "/groups" : "/"}
             className={`flex items-center gap-2 px-1 py-3 ${
               tab.active
                 ? "border-b-2 border-[#ff2e93]"
@@ -49,7 +50,7 @@ export function Navbar() {
             >
               {tab.label}
             </span>
-          </button>
+          </Link>
         ))}
       </nav>
 
