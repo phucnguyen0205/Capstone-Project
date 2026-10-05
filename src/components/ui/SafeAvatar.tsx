@@ -67,7 +67,13 @@ export function SafeAvatar({
         src={finalSrc}
         alt={alt}
         loading={loading}
-        referrerPolicy="no-referrer"
+        // Default `referrerPolicy` (i.e. send the page's Referer) is
+        // REQUIRED for lh3.googleusercontent.com — Google refuses
+        // requests whose Referer is missing or marked `no-referrer`.
+        // We only proxy through `/api/avatar` for Cloudinary +
+        // Unsplash now (Google is passed through unchanged), so the
+        // browser is the one talking to Google directly and it has
+        // to look like a same-origin page load.
         onError={() => setErrored(true)}
         className={imgClassName}
       />

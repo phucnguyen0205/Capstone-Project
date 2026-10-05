@@ -85,7 +85,19 @@ export async function GET(req: NextRequest) {
     const upstream = await fetch(finalUrl, {
       // Pass through Google-specific size hint untouched so we still
       // request the optimal resolution.
-      headers: { Accept: "image/*" },
+      //
+      // `Referer` is REQUIRED for lh3.googleusercontent.com — without
+      // it Google returns 403 (it used to be the case that omitting
+      // the header still worked, but as of 2026 the CDN refuses
+      // hot-link requests from server-side fetchers that don't look
+      // like a browser. We set the upstream's own origin as the
+      // referer so Google treats the request as a "same-origin
+      // image reference" and serves the binary. For Cloudinary and
+      // Unsplash the header is harmless.
+      headers: {
+        Accept: "image/*",
+        Referer: `${target.protocol}//${target.hostname}/`,
+      },
     });
     if (!upstream.ok) {
       return new NextResponse(`Upstream ${upstream.status}`, {
