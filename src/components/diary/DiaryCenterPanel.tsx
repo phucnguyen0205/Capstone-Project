@@ -180,7 +180,7 @@ export function DiaryCenterPanel({
 
   return (
     <>
-      <section className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pr-1">
         <div className="flex w-full flex-col gap-3 rounded-2xl border border-[#3a3366] bg-[rgba(19,19,31,0.7)] p-4 backdrop-blur-[8px]">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-white">Nhật ký Đa ống kính</h2>

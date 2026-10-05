@@ -255,7 +255,7 @@ export function DiaryRightPanel() {
     : radarItems.map((u) => ({ ...u, isOnline: false }));
 
   return (
-    <aside className="flex w-[330px] shrink-0 flex-col gap-4">
+    <aside className="flex w-[330px] shrink-0 flex-col gap-4 overflow-y-auto min-h-0 max-h-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pr-1">
       {/* ── Ra khơi tìm bạn (radar) ─────────────────────────────────── */}
       <section className="flex w-full flex-col gap-3 rounded-2xl border border-[#3a3366] bg-[rgba(19,19,31,0.7)] p-4 backdrop-blur-[8px]">
         <div className="flex items-center justify-between">

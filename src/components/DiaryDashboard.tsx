@@ -34,7 +34,7 @@ export function DiaryDashboard() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-black">
       <GroupsTopBar />
-      <main className="flex w-full min-h-0 flex-1 items-start gap-4 overflow-hidden px-6 pb-6 pt-4">
+      <main className="flex w-full min-h-0 flex-1 items-stretch gap-4 overflow-hidden px-6 pb-6 pt-4">
         <DiaryLeftPanel
           activeTier={activeTier}
           onSelectTier={setActiveTier}
