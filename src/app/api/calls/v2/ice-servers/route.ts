@@ -3,6 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getIceServers } from '@/lib/iceServers';
 
+// Route này phụ thuộc session/headers (cookie) → không thể prerender
+// tĩnh. Buộc chạy ở runtime để Next.js không cố generate HTML tĩnh.
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
