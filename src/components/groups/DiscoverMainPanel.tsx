@@ -400,17 +400,28 @@ export function DiscoverMainPanel() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/users/${myId}/friends`, {
+        const res = await fetch(`/api/users/${myId}/friends?list=friends`, {
           credentials: "include",
           cache: "no-store",
         });
         if (!res.ok) return;
+        // The endpoint returns a bare JSON array of user objects
+        // (not wrapped in `{ friends: [...] }`). Earlier revisions
+        // read `data.friends` which was always `undefined` →
+        // `friendIds` stayed empty → the "Bạn bè" filter rendered
+        // 0 reels. Accept both shapes so we don't break if the API
+        // is later wrapped.
         const data = (await res.json().catch(() => null)) as
+          | Array<{ id: string }>
           | { friends?: Array<{ id: string }> }
           | null;
-        if (!cancelled && Array.isArray(data?.friends)) {
-          setFriendIds(new Set(data.friends.map((f) => f.id)));
-        }
+        if (cancelled) return;
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray((data as { friends?: unknown })?.friends)
+            ? ((data as { friends: Array<{ id: string }> }).friends)
+            : [];
+        setFriendIds(new Set(list.map((f) => f.id)));
       } catch {
         // Network blip — empty set means "Từ bạn bè" will show
         // zero results, which is honest.
