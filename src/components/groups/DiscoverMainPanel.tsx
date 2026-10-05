@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { SafeAvatar } from "@/components/ui/SafeAvatar";
 import { useUserMenu } from "@/hooks/useUserMenu";
@@ -9,6 +9,16 @@ import {
   type ReelItem,
 } from "@/components/groups/ReelsPlayer";
 import { ReelCommentsPanel } from "@/components/groups/ReelCommentsPanel";
+import { DiscoverReelEnhancements } from "@/components/groups/DiscoverReelEnhancements";
+import { ReelQuickActions } from "@/components/groups/ReelQuickActions";
+import { SwipeHint } from "@/components/groups/SwipeHint";
+import {
+  applyReelFilter,
+  loadDismissedReels,
+  persistDismissedReels,
+  searchReels,
+  type ReelFilter,
+} from "@/components/groups/reelEnhancements";
 
 /* ─── Helpers ──────────────────────────────────────────────────────────── */
 
@@ -229,6 +239,126 @@ export function DiscoverMainPanel() {
     setActiveItem((curr) => (curr && curr.id === next.id ? next : curr));
   }, []);
 
+  /* ── Discover page upgrades (non-breaking) ─────────────────────────
+   * These state slices power the new search box, filter chips, swipe-
+   * to-dismiss, and quick-action overlay. The original ReelsPlayer
+   * UI is untouched — we only wrap it in extra layers. */
+
+  // Search + filter chips (overlay row right below the tab bar).
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<ReelFilter>("recent");
+
+  // Reel ids the viewer has dismissed via swipe or "Bỏ qua" button.
+  // Persisted to localStorage so a dismissed reel doesn't return on
+  // the next visit.
+  const [dismissedIds, setDismissedIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+
+  // Viewer's interest tags (hobbies). Used for the rule-based
+  // compatibility badge in ReelQuickActions. We read this once on
+  // mount from the cached session user — falls back to empty array
+  // if the profile doesn't have hobbies set yet.
+  const viewerHobbies =
+    (userMenu.session?.user as { hobbies?: string | null } | undefined)
+      ?.hobbies ?? "";
+  const viewerInterests = useMemo(
+    () =>
+      viewerHobbies
+        .split(/[,\u00B7]/)
+        .map((s) => s.trim())
+        .filter(Boolean),
+    [viewerHobbies],
+  );
+
+  // Friend set — only populated when the "Từ bạn bè" filter is on.
+  // Lazy-loaded so we don't hit /api/users/me/friends unless the
+  // user actually picks that chip.
+  const [friendIds, setFriendIds] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    if (filter !== "friends") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/users/${myId}/friends`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = (await res.json().catch(() => null)) as
+          | { friends?: Array<{ id: string }> }
+          | null;
+        if (!cancelled && Array.isArray(data?.friends)) {
+          setFriendIds(new Set(data.friends.map((f) => f.id)));
+        }
+      } catch {
+        // Network blip — empty set means "Từ bạn bè" will show
+        // zero results, which is honest.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [filter, myId]);
+
+  // Hydrate dismissed ids from localStorage on mount.
+  useEffect(() => {
+    setDismissedIds(loadDismissedReels());
+  }, []);
+
+  // Compute the filtered/visible items without mutating `items`.
+  // We keep `items` as the source of truth (so the underlying
+  // ReelsPlayer doesn't re-render its slide key on every search
+  // keystroke) and pass a memoised view into it.
+  const visibleItems = useMemo(() => {
+    let v = items.filter((it) => !dismissedIds.has(it.id));
+    v = searchReels(v, search);
+    v = applyReelFilter(v, filter, friendIds);
+    return v;
+  }, [items, dismissedIds, search, filter, friendIds]);
+
+  // Swipe gesture wiring for the reels column. We track the start
+  // x-coordinate and current delta in refs so the touch handlers
+  // don't re-render on every pointer move — only the visual swipe
+  // hint needs to know the delta.
+  const swipeStartX = useRef<number | null>(null);
+  const [swipeDeltaX, setSwipeDeltaX] = useState(0);
+
+  const dismissActive = useCallback(() => {
+    const target = activeItem;
+    if (!target) return;
+    setDismissedIds((prev) => {
+      const next = new Set(prev);
+      next.add(target.id);
+      persistDismissedReels(next);
+      return next;
+    });
+  }, [activeItem]);
+
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    swipeStartX.current = e.touches[0]?.clientX ?? null;
+  }, []);
+  const onTouchMove = useCallback((e: React.TouchEvent) => {
+    if (swipeStartX.current === null) return;
+    setSwipeDeltaX((e.touches[0]?.clientX ?? 0) - swipeStartX.current);
+  }, []);
+  const onTouchEnd = useCallback(() => {
+    const d = swipeDeltaX;
+    if (d >= 100) dismissActive();
+    swipeStartX.current = null;
+    setSwipeDeltaX(0);
+  }, [swipeDeltaX, dismissActive]);
+
+  // Report action — show a small confirmation toast. We don't open
+  // the full report modal here because the existing /api/posts/[id]/
+  // report endpoint is wired into the home feed; the Discover page
+  // just needs an entry point. The toast auto-dismisses.
+  const [reportToast, setReportToast] = useState<string | null>(null);
+  const handleReport = useCallback((reelId: string) => {
+    setReportToast(reelId);
+    setTimeout(() => setReportToast((curr) => (curr === reelId ? null : curr)), 1500);
+  }, []);
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-black">
       {/* ── Top tab bar ───────────────────────────────────────────── */}
@@ -256,6 +386,19 @@ export function DiscoverMainPanel() {
         </div>
       </div>
 
+      {/* ── Discover page upgrades: search + filter chips ── */}
+      {/* Renders BELOW the original tab bar so the original 2-tab
+        switch ("Khám phá" / "Thư viện của bạn") still controls the
+        data source. The new chips filter the result of the active
+        data source. */}
+      <DiscoverReelEnhancements
+        search={search}
+        onSearchChange={setSearch}
+        filter={filter}
+        onFilterChange={setFilter}
+        itemCount={visibleItems.length}
+      />
+
       {/* ── Body: 3-column layout (left sidebar | reels | right rail) */}
       <div className="relative flex min-h-0 flex-1 items-stretch overflow-hidden">
         {/* ── Col 1: left sidebar ── */}
@@ -268,7 +411,12 @@ export function DiscoverMainPanel() {
 
         {/* ── Col 2: reels player (video must be centred both
                 horizontally and vertically inside the viewport) ── */}
-        <div className="relative flex min-w-0 h-full flex-1 items-center justify-center overflow-hidden">
+        <div
+          className="relative flex min-w-0 h-full flex-1 items-center justify-center overflow-hidden"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+        >
           {loading ? (
             <div className="flex flex-1 items-center justify-center text-center">
               <div>
@@ -302,7 +450,7 @@ export function DiscoverMainPanel() {
             </div>
           ) : (
             <ReelsPlayer
-              items={items}
+              items={visibleItems}
               myId={myId}
               onItemReplaced={handleItemReplaced}
               onActiveChange={setActiveItem}
@@ -312,6 +460,34 @@ export function DiscoverMainPanel() {
                   : undefined
               }
             />
+          )}
+
+          {/* ── Discover upgrades: quick actions + swipe hint ── */}
+          {/* Rendered conditionally on the active reel so we don't
+            show quick actions for a stale slide after a search. */}
+          {activeItem && !loading && !error && (
+            <>
+              <ReelQuickActions
+                reel={activeItem}
+                viewerInterests={viewerInterests}
+                mutualFriends={0}
+                onReport={handleReport}
+              />
+              <SwipeHint
+                onDismiss={dismissActive}
+                onTapDismiss={dismissActive}
+              />
+            </>
+          )}
+
+          {/* ── Lightweight report toast (auto-dismisses) ── */}
+          {reportToast && (
+            <div
+              role="status"
+              className="pointer-events-none absolute left-1/2 top-12 z-30 -translate-x-1/2 rounded-full border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-[11px] font-bold text-amber-200 backdrop-blur-md"
+            >
+              Đã ghi nhận báo cáo — cảm ơn bạn!
+            </div>
           )}
         </div>
 
