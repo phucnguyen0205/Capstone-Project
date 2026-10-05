@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { SafeAvatar } from "@/components/ui/SafeAvatar";
 import { useUserMenu } from "@/hooks/useUserMenu";
@@ -11,11 +11,8 @@ import {
 import { ReelCommentsPanel } from "@/components/groups/ReelCommentsPanel";
 import { DiscoverReelEnhancements } from "@/components/groups/DiscoverReelEnhancements";
 import { ReelQuickActions } from "@/components/groups/ReelQuickActions";
-import { SwipeHint } from "@/components/groups/SwipeHint";
 import {
   applyReelFilter,
-  loadDismissedReels,
-  persistDismissedReels,
   searchReels,
   type ReelFilter,
 } from "@/components/groups/reelEnhancements";
@@ -248,13 +245,6 @@ export function DiscoverMainPanel() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ReelFilter>("recent");
 
-  // Reel ids the viewer has dismissed via swipe or "Bỏ qua" button.
-  // Persisted to localStorage so a dismissed reel doesn't return on
-  // the next visit.
-  const [dismissedIds, setDismissedIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
-
   // Viewer's interest tags (hobbies). Used for the rule-based
   // compatibility badge in ReelQuickActions. We read this once on
   // mount from the cached session user — falls back to empty array
@@ -301,53 +291,16 @@ export function DiscoverMainPanel() {
     };
   }, [filter, myId]);
 
-  // Hydrate dismissed ids from localStorage on mount.
-  useEffect(() => {
-    setDismissedIds(loadDismissedReels());
-  }, []);
-
   // Compute the filtered/visible items without mutating `items`.
   // We keep `items` as the source of truth (so the underlying
   // ReelsPlayer doesn't re-render its slide key on every search
   // keystroke) and pass a memoised view into it.
   const visibleItems = useMemo(() => {
-    let v = items.filter((it) => !dismissedIds.has(it.id));
+    let v = items;
     v = searchReels(v, search);
     v = applyReelFilter(v, filter, friendIds);
     return v;
-  }, [items, dismissedIds, search, filter, friendIds]);
-
-  // Swipe gesture wiring for the reels column. We track the start
-  // x-coordinate and current delta in refs so the touch handlers
-  // don't re-render on every pointer move — only the visual swipe
-  // hint needs to know the delta.
-  const swipeStartX = useRef<number | null>(null);
-  const [swipeDeltaX, setSwipeDeltaX] = useState(0);
-
-  const dismissActive = useCallback(() => {
-    const target = activeItem;
-    if (!target) return;
-    setDismissedIds((prev) => {
-      const next = new Set(prev);
-      next.add(target.id);
-      persistDismissedReels(next);
-      return next;
-    });
-  }, [activeItem]);
-
-  const onTouchStart = useCallback((e: React.TouchEvent) => {
-    swipeStartX.current = e.touches[0]?.clientX ?? null;
-  }, []);
-  const onTouchMove = useCallback((e: React.TouchEvent) => {
-    if (swipeStartX.current === null) return;
-    setSwipeDeltaX((e.touches[0]?.clientX ?? 0) - swipeStartX.current);
-  }, []);
-  const onTouchEnd = useCallback(() => {
-    const d = swipeDeltaX;
-    if (d >= 100) dismissActive();
-    swipeStartX.current = null;
-    setSwipeDeltaX(0);
-  }, [swipeDeltaX, dismissActive]);
+  }, [items, search, filter, friendIds]);
 
   // Report action — show a small confirmation toast. We don't open
   // the full report modal here because the existing /api/posts/[id]/
@@ -411,12 +364,7 @@ export function DiscoverMainPanel() {
 
         {/* ── Col 2: reels player (video must be centred both
                 horizontally and vertically inside the viewport) ── */}
-        <div
-          className="relative flex min-w-0 h-full flex-1 items-center justify-center overflow-hidden"
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-        >
+        <div className="relative flex min-w-0 h-full flex-1 items-center justify-center overflow-hidden">
           {loading ? (
             <div className="flex flex-1 items-center justify-center text-center">
               <div>
@@ -462,22 +410,18 @@ export function DiscoverMainPanel() {
             />
           )}
 
-          {/* ── Discover upgrades: quick actions + swipe hint ── */}
+          {/* ── Discover upgrades: quick actions ── */}
           {/* Rendered conditionally on the active reel so we don't
-            show quick actions for a stale slide after a search. */}
+            show quick actions for a stale slide after a search.
+            Vuốt xuống/dưới để chuyển video vẫn do ReelsPlayer
+            gốc xử lý (snap-y + IntersectionObserver). */}
           {activeItem && !loading && !error && (
-            <>
-              <ReelQuickActions
-                reel={activeItem}
-                viewerInterests={viewerInterests}
-                mutualFriends={0}
-                onReport={handleReport}
-              />
-              <SwipeHint
-                onDismiss={dismissActive}
-                onTapDismiss={dismissActive}
-              />
-            </>
+            <ReelQuickActions
+              reel={activeItem}
+              viewerInterests={viewerInterests}
+              mutualFriends={0}
+              onReport={handleReport}
+            />
           )}
 
           {/* ── Lightweight report toast (auto-dismisses) ── */}

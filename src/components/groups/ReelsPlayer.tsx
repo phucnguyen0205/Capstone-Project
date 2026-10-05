@@ -94,6 +94,30 @@ export function ReelsPlayer({
   const [activeIndex, setActiveIndex] = useState(0);
   const [openCommentsFor, setOpenCommentsFor] = useState<ReelItem | null>(null);
 
+  // ── Auto-advance: when the active reel ends, scroll to the next one
+  // unless the user paused it manually. We track which reel is currently
+  // looping and whether it was paused by a tap so the auto-next respects
+  // the user's "pause" intent.
+  const [pausedActive, setPausedActive] = useState(false);
+  const handleActivePlayedEnd = useCallback(() => {
+    if (pausedActive) return;
+    setActiveIndex((curr) => Math.min(curr + 1, items.length - 1));
+  }, [pausedActive, items.length]);
+
+  // When the user swipes to a new reel, scroll the snap container so
+  // the new reel comes into view. We do this on index change rather
+  // than in the IntersectionObserver callback to avoid feedback loops.
+  useEffect(() => {
+    const root = scrollerRef.current;
+    if (!root) return;
+    const target = root.querySelector<HTMLElement>(
+      `[data-reel-slide][data-index="${activeIndex}"]`,
+    );
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [activeIndex]);
+
   // Track which video is the "active" one as the user swipes up/down.
   // We rely on IntersectionObserver rather than scroll-end debounce
   // because the latter feels janky on short reels lists.
@@ -152,6 +176,8 @@ export function ReelsPlayer({
             onOpenComments={() => setOpenCommentsFor(item)}
             onUpdated={(next) => updateReel(items, idx, next, setActiveIndex)}
             onUnlocked={(unlocked) => onItemReplaced?.(unlocked)}
+            onPlayedEnd={idx === activeIndex ? handleActivePlayedEnd : undefined}
+            onPauseChange={idx === activeIndex ? setPausedActive : undefined}
           />
         ))}
       </div>
