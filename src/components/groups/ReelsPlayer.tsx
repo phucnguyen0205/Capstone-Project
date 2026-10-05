@@ -149,17 +149,21 @@ export function ReelsPlayer({
             // Defer state writes out of the observer callback so we
             // don't trigger a "setState during render of another
             // component" warning when the parent (DiscoverMainPanel)
-            // runs its own setState in `onActiveChange`. queueMicrotask
-            // runs after the current event-loop tick but before the
-            // browser paints, so the active slide still updates in
-            // the same frame from the user's perspective.
-            queueMicrotask(() => {
+            // runs its own setState in `onActiveChange`. Earlier
+            // revisions used `queueMicrotask` but that still runs
+            // inside the current React render flush when the
+            // observer fires synchronously from a `scrollIntoView`
+            // in another effect — and the resulting `setState` on
+            // the parent still trips the warning. `setTimeout(0)`
+            // pushes the update to a fresh task so React finishes
+            // the current commit before the parent re-renders.
+            setTimeout(() => {
               setActiveIndex((curr) => {
                 if (curr === idx) return curr;
                 onActiveChangeRef.current?.(nextItem);
                 return idx;
               });
-            });
+            }, 0);
           }
         }
       },
@@ -251,6 +255,8 @@ function ReelSlide({
   onOpenComments,
   onUpdated,
   onUnlocked,
+  onPlayedEnd,
+  onPauseChange,
 }: {
   item: ReelItem;
   index: number;
@@ -264,6 +270,18 @@ function ReelSlide({
    * reel in its list so the unlocked item survives a re-render.
    */
   onUnlocked?: (unlocked: ReelItem) => void;
+  /**
+   * Fired by the <video> element when the current reel finishes
+   * playing. Only attached for the active slide — the parent
+   * decides whether to auto-advance to the next reel.
+   */
+  onPlayedEnd?: () => void;
+  /**
+   * Fired by the <video> element on play/pause transitions. Only
+   * attached for the active slide so the parent can suppress
+   * auto-advance when the user manually paused.
+   */
+  onPauseChange?: (paused: boolean) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [muted, setMuted] = useState(true);
@@ -384,6 +402,9 @@ function ReelSlide({
           loop
           preload="metadata"
           onClick={togglePlay}
+          onEnded={onPlayedEnd}
+          onPlay={() => onPauseChange?.(false)}
+          onPause={() => onPauseChange?.(true)}
           className="max-h-full max-w-full object-contain"
           style={{ aspectRatio: aspect }}
         />
