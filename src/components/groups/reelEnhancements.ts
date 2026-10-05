@@ -12,12 +12,12 @@
 
 /* ─── Filters ──────────────────────────────────────────────────────────── */
 
-export type ReelFilter = "recent" | "trending" | "friends";
+export type ReelFilter = "all" | "recent" | "trending" | "friends";
 
 export const REEL_FILTERS: ReadonlyArray<{
   key: ReelFilter;
   label: string;
-  icon: "clock" | "playCircle" | "users2";
+  icon: "slidersHorizontal" | "clock" | "playCircle" | "users2";
 }> = [
   { key: "recent", label: "Mới nhất", icon: "clock" },
   { key: "trending", label: "Thịnh hành", icon: "playCircle" },
@@ -38,6 +38,11 @@ export function applyReelFilter<
     author: { id: string };
   },
 >(reels: T[], filter: ReelFilter, friendIds: ReadonlySet<string>): T[] {
+  // "all" keeps the order returned by the server (usually recency
+  // desc, but the API is the source of truth).
+  if (filter === "all") {
+    return reels.slice();
+  }
   if (filter === "friends") {
     return reels.filter((r) => friendIds.has(r.author.id));
   }

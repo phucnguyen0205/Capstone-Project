@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { Icon } from "@/components/ui/Icon";
 import { SafeAvatar } from "@/components/ui/SafeAvatar";
 import { useUserMenu } from "@/hooks/useUserMenu";
@@ -41,20 +44,27 @@ function LeftSidebar({
   myAvatar,
   myUsername,
   myName,
+  myId,
   itemCount,
   search,
   onSearchChange,
   filter,
   onFilterChange,
+  totalCount,
 }: {
   myAvatar: string | null;
   myUsername: string | null;
   myName: string | null;
+  myId: string | null;
   itemCount: number;
   search: string;
   onSearchChange: (next: string) => void;
   filter: ReelFilter;
   onFilterChange: (next: ReelFilter) => void;
+  /** Unfiltered reel count — shown next to "video" stat so the
+   *  user can see both the total and the visible-after-filter
+   *  number. */
+  totalCount: number;
 }) {
   // Local draft so the input feels snappy; debounce into the parent
   // state (300ms) to avoid re-filtering on every keystroke.
@@ -73,39 +83,68 @@ function LeftSidebar({
     onSearchChange("");
   };
 
+  // Active route — drives nav button highlight so it stays in sync
+  // with the real URL instead of the hard-coded `active: true` flag
+  // that used to be statically set on "Khám phá".
+  const pathname = usePathname();
+  const profileHref = myUsername ? `/profile/${myUsername}` : "/profile";
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname === href || pathname?.startsWith(href + "/");
+
+  // Nav definitions. Upload shortcut was removed per design.
+  const NAV: ReadonlyArray<{
+    label: string;
+    icon: "home" | "users2" | "compass" | "bellDot" | "logOut";
+    href: string;
+    /** When provided the nav item is rendered as a real <button>
+     *  that performs the action instead of a navigation link. */
+    onClick?: () => void;
+  }> = [
+    { label: "Trang chủ", icon: "home", href: "/" },
+    { label: "Bạn bè", icon: "users2", href: "/friends" },
+    { label: "Khám phá", icon: "compass", href: "/discover" },
+    { label: "Thông báo", icon: "bellDot", href: "/notifications" },
+  ];
+
   return (
     <aside className="hidden h-full w-[280px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-white/5 bg-black/40 p-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex">
-      {/* ── Profile strip ── */}
-      <div className="flex items-center gap-3">
+      {/* ── Profile strip — click → my profile ── */}
+      <Link
+        href={profileHref}
+        className="group flex items-center gap-3 rounded-xl p-1 -m-1 transition-colors hover:bg-white/5"
+        aria-label="Mở hồ sơ của tôi"
+      >
         <SafeAvatar
           src={myAvatar}
           username={myUsername}
           name={myName}
           alt={myUsername ?? ""}
           imgClassName="size-full rounded-full object-cover"
-          className="size-11 shrink-0 rounded-full ring-2 ring-cyan-400/40"
+          className="size-11 shrink-0 rounded-full ring-2 ring-cyan-400/40 transition group-hover:ring-cyan-300/70"
         />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-bold text-white">
+          <p className="truncate text-[13px] font-bold text-white group-hover:text-cyan-200">
             {myName ?? myUsername ?? "Bạn"}
           </p>
           <p className="truncate text-[10px] text-[#94a3b8]">
             @{myUsername ?? "unknown"}
           </p>
         </div>
-      </div>
+      </Link>
 
-      {/* ── Stat block ── */}
+      {/* ── Stat block ──
+           Shows both the visible-after-filter count and the unfiltered
+           total so the user understands what their filters are doing. */}
       <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2">
         <Icon name="playCircle" size={14} className="text-cyan-300" />
         <span className="text-[11px] text-[#94a3b8]">
-          <span className="font-bold text-white">{itemCount}</span> video
+          <span className="font-bold text-white">{itemCount}</span>
+          <span className="mx-1 text-[#475569]">/</span>
+          <span className="text-[#94a3b8]">{totalCount}</span> video
         </span>
       </div>
 
-      {/* ── Search box ── */}
-      {/* Lives in col 1 so it never overlaps the reels player or
-          right rail. Debounced into parent state. */}
+      {/* ── Search box + clear button ── */}
       <div className="flex flex-col gap-2">
         <div className="relative">
           <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#64748b]">
@@ -116,7 +155,15 @@ function LeftSidebar({
             inputMode="search"
             value={draft}
             onChange={(e) => handleChange(e.target.value)}
+            onKeyDown={(e) => {
+              // Esc clears instantly (without waiting for the debounce).
+              if (e.key === "Escape" && draft) {
+                e.preventDefault();
+                clear();
+              }
+            }}
             placeholder="Tìm caption, tác giả…"
+            aria-label="Tìm kiếm video theo caption hoặc tác giả"
             className="w-full rounded-full border border-white/10 bg-white/5 py-1.5 pl-7 pr-7 text-[11px] text-white placeholder:text-[#64748b] focus:border-cyan-400/40 focus:outline-none"
           />
           {draft && (
@@ -131,22 +178,29 @@ function LeftSidebar({
           )}
         </div>
 
-        {/* ── Filter chips ── */}
+        {/* ── Filter chips ──
+             First chip is "Tất cả" (filter === "all") which clears
+             the sort/friend-restriction but keeps the search box
+             active. The other three reuse REEL_FILTERS. */}
         <div className="flex flex-wrap items-center gap-1.5">
-          {REEL_FILTERS.map((f) => {
+          {([
+            { key: "all" as const, label: "Tất cả", icon: "slidersHorizontal" as const },
+            ...REEL_FILTERS,
+          ]).map((f) => {
             const active = f.key === filter;
             return (
               <button
                 key={f.key}
                 type="button"
-                onClick={() => onFilterChange(f.key)}
+                onClick={() => onFilterChange(f.key as ReelFilter)}
+                aria-pressed={active}
                 className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold transition-all ${
                   active
                     ? "bg-gradient-to-r from-cyan-400 to-violet-400 text-[#0c0918]"
                     : "border border-white/10 bg-white/5 text-[#94a3b8] hover:text-white"
                 }`}
               >
-                <Icon name={f.icon} size={10} />
+                <Icon name={f.icon as any} size={10} />
                 {f.label}
               </button>
             );
@@ -154,28 +208,54 @@ function LeftSidebar({
         </div>
       </div>
 
-      {/* ── Nav shortcuts (Tải lên removed per design) ── */}
+      {/* ── Nav shortcuts ──
+           Each entry is a real <Link> so Next.js handles prefetch +
+           scroll. The active item is derived from the current path
+           so reload-then-highlight stays correct. "Tải lên" was
+           removed per design. */}
       <nav className="flex w-full flex-col gap-1">
-        {[
-          { label: "Trang chủ", icon: "home" as const },
-          { label: "Bạn bè", icon: "users2" as const },
-          { label: "Khám phá", icon: "compass" as const, active: true },
-        ].map((it) => (
-          <button
-            key={it.label}
-            type="button"
-            title={it.label}
-            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors ${
-              it.active
-                ? "bg-gradient-to-r from-cyan-500/20 to-violet-500/20 text-white"
-                : "text-[#94a3b8] hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            <Icon name={it.icon} size={18} />
-            <span className="text-[12px] font-semibold">{it.label}</span>
-          </button>
-        ))}
+        {NAV.map((it) => {
+          const active = isActive(it.href);
+          return (
+            <Link
+              key={it.label}
+              href={it.href}
+              title={it.label}
+              aria-current={active ? "page" : undefined}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors ${
+                active
+                  ? "bg-gradient-to-r from-cyan-500/20 to-violet-500/20 text-white"
+                  : "text-[#94a3b8] hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <Icon name={it.icon} size={18} />
+              <span className="text-[12px] font-semibold">{it.label}</span>
+            </Link>
+          );
+        })}
+
+        {/* ── Sign-out button (uses session signOut from next-auth) ── */}
+        <button
+          type="button"
+          title="Đăng xuất"
+          onClick={() => {
+            // Avoid firing on auto-render — only sign out when the
+            // user explicitly clicks.
+            void signOut({ callbackUrl: "/auth/signin" });
+          }}
+          className="mt-1 flex w-full items-center gap-3 rounded-xl border border-white/5 px-3 py-2 text-left text-[#94a3b8] transition-colors hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-300"
+        >
+          <Icon name="logOut" size={18} />
+          <span className="text-[12px] font-semibold">Đăng xuất</span>
+        </button>
       </nav>
+
+      {/* ── Footer: viewer id (debug-ish, useful for support) ── */}
+      {myId && (
+        <p className="mt-auto truncate text-[9px] text-[#475569]">
+          uid: {myId}
+        </p>
+      )}
     </aside>
   );
 }
@@ -305,7 +385,7 @@ export function DiscoverMainPanel() {
 
   // Search + filter chips (overlay row right below the tab bar).
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<ReelFilter>("recent");
+  const [filter, setFilter] = useState<ReelFilter>("all");
 
   // Viewer's interest tags (hobbies). Used for the rule-based
   // compatibility badge in ReelQuickActions. We read this once on
@@ -408,7 +488,9 @@ export function DiscoverMainPanel() {
           myAvatar={myAvatar}
           myUsername={myUsername}
           myName={myName}
+          myId={myId}
           itemCount={visibleItems.length}
+          totalCount={items.length}
           search={search}
           onSearchChange={setSearch}
           filter={filter}
