@@ -326,10 +326,23 @@ export async function GET(req: NextRequest) {
     });
 
     enriched.sort((a, b) => b._score - a._score);
-    // Top 50 keeps the UI snappy. The client can paginate by
-    // accepting a `?cursor=` later, but for v1 we cap here.
-    const limit = Math.min(50, parseInt(new URL(req.url).searchParams.get("limit") ?? "30"));
-    const items = enriched.slice(0, limit).map(({ _score, ...rest }) => rest);
+    // Return every visible candidate. Earlier revisions capped the
+    // response at 30/50 with `Math.min(50, parseInt(... ?? "30"))`,
+    // which silently dropped reels from the Discover page when a
+    // pool had more than 30 videos — users complained "chỉ thấy
+    // 2 video" even though the DB had 5+. The window above is
+    // already capped (WINDOW = 200) so the in-memory set is bounded
+    // and there's no perf concern returning all of them.
+    //
+    // The `?limit=` param is still honoured so a future client
+    // (e.g. a "Load more" button) can page through larger pools.
+    const requested = new URL(req.url).searchParams.get("limit");
+    const items =
+      requested !== null
+        ? enriched
+            .slice(0, Math.min(parseInt(requested) || enriched.length, enriched.length))
+            .map(({ _score, ...rest }) => rest)
+        : enriched.map(({ _score, ...rest }) => rest);
 
     return NextResponse.json({ items }, { headers: corsHeaders });
   } catch (err: unknown) {
