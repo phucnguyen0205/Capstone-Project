@@ -1,0 +1,406 @@
+"use client";
+
+import { useState } from "react";
+import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Icon } from "@/components/ui/Icon";
+
+type LoginTab = "email" | "phone";
+
+export default function SignInPage() {
+  const router = useRouter();
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState<LoginTab>("email");
+  
+  // Email login state
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  
+  // Phone login state
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [step, setStep] = useState<"phone" | "otp">("phone");
+  const [otpSent, setOtpSent] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  
+  // Common state
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Handle email login
+  async function handleEmailSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
+
+    setLoading(false);
+
+    if (result?.error) {
+      setError("Email hoặc mật khẩu không đúng");
+    } else {
+      router.push("/");
+      router.refresh();
+    }
+  }
+
+  // Handle send OTP
+  async function handleSendOtp() {
+    if (!phone) {
+      setError("Vui lòng nhập số điện thoại");
+      return;
+    }
+    
+    setError("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? "Gửi mã OTP thất bại");
+        setLoading(false);
+        return;
+      }
+
+      setOtpSent(true);
+      setStep("otp");
+      setCountdown(300); // 5 minutes
+
+      // Blur the phone <input> before it unmounts to avoid Chrome's
+      // "Failed to execute 'removeChild' on 'Node'" error in React 19.
+      blurActive();
+      
+      // Start countdown timer
+      const timer = setInterval(() => {
+        setCountdown((c) => {
+          if (c <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return c - 1;
+        });
+      }, 1000);
+
+    } catch (err) {
+      setError("Lỗi kết nối server");
+    }
+    
+    setLoading(false);
+  }
+
+  // Handle verify OTP and login
+  async function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, otp }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? "Mã OTP không hợp lệ");
+        setLoading(false);
+        return;
+      }
+
+      // OTP đã hợp lệ — giờ tạo session qua NextAuth phone provider
+      const result = await signIn("phone", {
+        phone: data.phone ?? phone,
+        otp,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Không tạo được phiên đăng nhập. Vui lòng thử lại.");
+        setLoading(false);
+        return;
+      }
+
+      router.push("/");
+      router.refresh();
+    } catch (err) {
+      setError("Lỗi kết nối server");
+      setLoading(false);
+    }
+  }
+
+  // Handle Google login
+  function handleGoogleLogin() {
+    signIn("google", { callbackUrl: "/" });
+  }
+
+  // Format countdown
+  function formatTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  }
+
+  // Blur the currently focused element so a state change doesn't
+  // unmount a focused input/textarea (which causes "removeChild" errors
+  // in React 19 when Chrome tries to relocate focus to a detached parent).
+  function blurActive() {
+    if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  }
+
+  // Resend OTP
+  function handleResendOtp() {
+    if (countdown > 0) return;
+    setOtpSent(false);
+    setStep("phone");
+    setOtp("");
+    handleSendOtp();
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#090a0c]">
+      <div className="w-full max-w-[400px] rounded-3xl border border-[#242831] bg-[#111317] p-8">
+        <div className="mb-8 text-center">
+          <div
+            className="mx-auto mb-4 flex size-12 items-center justify-center rounded-[18px]"
+            style={{ backgroundImage: "linear-gradient(45deg, rgb(255, 46, 147) 25%, rgb(255, 138, 86) 75%)" }}
+          >
+            <Icon name="zap" size={24} />
+          </div>
+          <h1 className="text-2xl font-extrabold text-white">Đăng nhập</h1>
+          <p className="mt-2 text-sm text-[#a0a5b5]">Chào mừng bạn quay lại!</p>
+        </div>
+
+        {/* Tab switcher */}
+        <div className="mb-6 flex rounded-xl bg-[#171920] p-1">
+          <button
+            type="button"
+            onClick={() => { blurActive(); setActiveTab("email"); setError(""); setStep("phone"); setOtpSent(false); }}
+            className={`flex-1 rounded-lg py-2.5 text-[13px] font-semibold transition-all ${
+              activeTab === "email" 
+                ? "bg-[#242831] text-white" 
+                : "text-[#626775] hover:text-[#a0a5b5]"
+            }`}
+          >
+            Email
+          </button>
+          <button
+            type="button"
+            onClick={() => { blurActive(); setActiveTab("phone"); setError(""); setStep("phone"); setOtpSent(false); }}
+            className={`flex-1 rounded-lg py-2.5 text-[13px] font-semibold transition-all ${
+              activeTab === "phone" 
+                ? "bg-[#242831] text-white" 
+                : "text-[#626775] hover:text-[#a0a5b5]"
+            }`}
+          >
+            Số điện thoại
+          </button>
+        </div>
+
+        {/* Email login form */}
+        {activeTab === "email" && (
+          <form onSubmit={handleEmailSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[13px] font-semibold text-[#a0a5b5]">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="you@example.com"
+                autoComplete="username"
+                name="email"
+                className="w-full rounded-xl border border-[#242831] bg-[#171920] px-4 py-3 text-[14px] text-white outline-none placeholder:text-[#626775] focus:border-[#ff2e93]"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[13px] font-semibold text-[#a0a5b5]">Mật khẩu</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+                autoComplete="current-password"
+                name="password"
+                className="w-full rounded-xl border border-[#242831] bg-[#171920] px-4 py-3 text-[14px] text-white outline-none placeholder:text-[#626775] focus:border-[#ff2e93]"
+              />
+            </div>
+
+            {error && (
+              <p className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-[13px] text-red-400">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-2 w-full rounded-xl py-3 text-[14px] font-bold text-white disabled:opacity-50"
+              style={{ backgroundImage: "linear-gradient(45deg, rgb(255, 46, 147) 25%, rgb(255, 138, 86) 75%)" }}
+            >
+              {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+            </button>
+          </form>
+        )}
+
+        {/* Phone login form */}
+        {activeTab === "phone" && (
+          <>
+            {step === "phone" ? (
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[13px] font-semibold text-[#a0a5b5]">Số điện thoại</label>
+                  <div className="flex gap-2">
+                    <span className="flex items-center rounded-xl border border-[#242831] bg-[#171920] px-4 py-3 text-[14px] text-[#626775]">
+                      +84
+                    </span>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+                      required
+                      placeholder="9xx xxx xxx"
+                      autoComplete="tel-national"
+                      name="phone"
+                      inputMode="numeric"
+                      className="flex-1 rounded-xl border border-[#242831] bg-[#171920] px-4 py-3 text-[14px] text-white outline-none placeholder:text-[#626775] focus:border-[#ff2e93]"
+                    />
+                  </div>
+                </div>
+
+                {error && (
+                  <p className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-[13px] text-red-400">
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={loading}
+                  className="mt-2 w-full rounded-xl py-3 text-[14px] font-bold text-white disabled:opacity-50"
+                  style={{ backgroundImage: "linear-gradient(45deg, rgb(255, 46, 147) 25%, rgb(255, 138, 86) 75%)" }}
+                >
+                  {loading ? "Đang gửi mã..." : "Gửi mã xác thực"}
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleVerifyOtp} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[13px] font-semibold text-[#a0a5b5]">Mã xác thực</label>
+                  <input
+                    type="text"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    required
+                    maxLength={6}
+                    autoComplete="one-time-code"
+                    inputMode="numeric"
+                    placeholder="Nhập 6 chữ số"
+                    className="w-full rounded-xl border border-[#242831] bg-[#171920] px-4 py-3 text-[14px] text-white outline-none placeholder:text-[#626775] focus:border-[#ff2e93] text-center tracking-widest"
+                  />
+                  <p className="text-center text-[12px] text-[#626775]">
+                    Mã OTP đã được gửi đến +84 {phone.slice(1)}
+                  </p>
+                </div>
+
+                {error && (
+                  <p className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-[13px] text-red-400">
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="mt-2 w-full rounded-xl py-3 text-[14px] font-bold text-white disabled:opacity-50"
+                  style={{ backgroundImage: "linear-gradient(45deg, rgb(255, 46, 147) 25%, rgb(255, 138, 86) 75%)" }}
+                >
+                  {loading ? "Đang xác thực..." : "Xác thực và đăng nhập"}
+                </button>
+
+                <div className="flex items-center justify-between text-[13px]">
+                  <button
+                    type="button"
+                    onClick={() => { blurActive(); setStep("phone"); setOtp(""); }}
+                    className="text-[#a0a5b5] hover:text-white"
+                  >
+                    ← Đổi số điện thoại
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={countdown > 0}
+                    className={`font-semibold ${countdown > 0 ? "text-[#626775]" : "text-[#ff2e93]"}`}
+                  >
+                    {countdown > 0 ? `Gửi lại sau ${formatTime(countdown)}` : "Gửi lại mã"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </>
+        )}
+
+        {/* Divider */}
+        <div className="my-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-[#242831]" />
+          <span className="text-[12px] text-[#626775]">hoặc</span>
+          <div className="h-px flex-1 bg-[#242831]" />
+        </div>
+
+        {/* Google login button */}
+        <button
+          type="button"
+          onClick={handleGoogleLogin}
+          className="flex w-full items-center justify-center gap-3 rounded-xl border border-[#242831] bg-[#171920] py-3 text-[14px] font-semibold text-white transition-all hover:bg-[#1f2329]"
+        >
+          <svg className="size-5" viewBox="0 0 24 24">
+            <path
+              fill="#EA4335"
+              d="M5.26620003,9.76452941 C6.19878754,6.93863203 8.85444915,4.90909091 12,4.90909091 C13.6909091,4.90909091 15.2181818,5.50909091 16.4181818,6.49090909 L19.9090909,3 C17.7818182,1.14545455 15.0545455,0 12,0 C7.27006974,0 3.1977497,2.69829785 1.23999023,6.65002441 L5.26620003,9.76452941 Z"
+            />
+            <path
+              fill="#34A853"
+              d="M16.0407269,18.0125889 C14.9509167,18.7163016 13.5660892,19.0909091 12,19.0909091 C8.86648613,19.0909091 6.21911939,17.076871 5.27698177,14.2678769 L1.23746264,17.3349879 C3.19279051,21.2936293 7.26500293,24 12,24 C14.9328362,24 17.7353462,22.9573905 19.834192,20.9995801 L16.0407269,18.0125889 Z"
+            />
+            <path
+              fill="#4A90E2"
+              d="M19.834192,20.9995801 C22.0291676,18.9520994 23.4545455,15.903663 23.4545455,12 C23.4545455,11.2909091 23.3454545,10.5272727 23.1818182,9.81818182 L12,9.81818182 L12,14.4545455 L18.4363636,14.4545455 C18.1187732,16.013626 17.2662994,17.2212117 16.0407269,18.0125889 L19.834192,20.9995801 Z"
+            />
+            <path
+              fill="#FBBC05"
+              d="M5.27698177,14.2678769 C5.03832634,13.556323 4.90909091,12.7937589 4.90909091,12 C4.90909091,11.2182781 5.03443647,10.4668121 5.26620003,9.76452941 L1.23999023,6.65002441 C0.43658717,8.26043162 0,10.0753848 0,12 C0,13.9195484 0.444780743,15.7 51.1631378,17.9636364 L5.27698177,14.2678769 Z"
+            />
+          </svg>
+          Tiếp tục với Google
+        </button>
+
+        <p className="mt-6 text-center text-[13px] text-[#626775]">
+          Chưa có tài khoản?{" "}
+          <Link href="/auth/signup" className="font-semibold text-[#ff2e93] hover:underline">
+            Đăng ký ngay
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+}
