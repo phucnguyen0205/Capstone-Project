@@ -326,6 +326,18 @@ export async function GET(req: NextRequest) {
     });
 
     enriched.sort((a, b) => b._score - a._score);
+    // User feedback: "chỉ thấy 2 video mới nhất" — the recommender
+    // rerank was burying the bottom 2-3 reels in any batch where
+    // the same author had uploaded twice (diversity penalty stacks
+    // per-item: 0.55 for the 2nd post from the same author, 0.30
+    // for the 3rd, etc.). For a small pool like ours (5 videos
+    // total) that penalty overshoots and some reels never make it
+    // into the visible top of the swipe deck. We keep the
+    // `recReason` field for the UI tooltip but bypass the score
+    // sort — the discover page should be "show me every reel"
+    // not "show me what the algorithm picks". Recency is the new
+    // primary key so the newest videos surface first.
+    enriched.sort((a, b) => b.createdAt - a.createdAt);
     // Return every visible candidate. Earlier revisions capped the
     // response at 30/50 with `Math.min(50, parseInt(... ?? "30"))`,
     // which silently dropped reels from the Discover page when a
