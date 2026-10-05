@@ -1,80 +1,60 @@
+"use client";
+
 import Link from "next/link";
-import { navTabs } from "@/lib/mock-data";
-import { Icon } from "@/components/ui/Icon";
+import { usePathname } from "next/navigation";
+import { HeaderLogo } from "@/components/HeaderLogo";
+import { HeaderCluster } from "@/components/HeaderCluster";
+
+// Top-level navigation tabs rendered in the centre of the global header.
+// Hardcoded so the layout never falls back to fake / placeholder data.
+//
+// "Khám phá" is the dedicated reels tab (see /discover). The "Tin nhắn"
+// and "Trang chủ" tabs still point at the root — chat opens the
+// sliding chat column and home is the feed column.
+const NAV_TABS = [
+  { id: "home", label: "Trang chủ", icon: "home" as const, href: "/" },
+  { id: "explore", label: "Khám phá", icon: "compass" as const, href: "/discover" },
+  { id: "messages", label: "Tin nhắn", icon: "messageCircle" as const, href: "/" },
+  { id: "groups", label: "Nhóm", icon: "heartHandshake" as const, href: "/groups" },
+];
 
 export function Navbar() {
+  const pathname = usePathname();
+  const isGroupsActive = pathname?.startsWith("/groups") ?? false;
+  const isExploreActive = pathname?.startsWith("/discover") ?? false;
+
   return (
-    <header className="flex h-[72px] w-full shrink-0 items-center justify-between border-b border-[#242831] bg-[#111317] px-8">
-      <Link href="/" className="flex items-center gap-2">
-        <div
-          className="flex size-9 items-center justify-center rounded-[18px]"
-          style={{
-            backgroundImage:
-              "linear-gradient(45deg, rgb(255, 46, 147) 25%, rgb(255, 138, 86) 75%)",
-          }}
-        >
-          <Icon name="zap" size={20} />
-        </div>
-        <p className="text-[22px] font-extrabold text-white">
-          Name
-          <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage:
-                "linear-gradient(14deg, rgb(255, 46, 147) 25%, rgb(255, 138, 86) 75%)",
-            }}
-          >
-            App
-          </span>
-        </p>
-      </Link>
+    <header
+      className="flex h-[72px] w-full shrink-0 items-center justify-between border-b border-[#242831] bg-[#111317] px-8"
+      data-surface="navbar"
+    >
+      <HeaderLogo />
 
       <nav className="flex items-center gap-8">
-        {navTabs.map((tab) => (
-          <Link
-            key={tab.id}
-            href={tab.id === "groups" ? "/groups" : "/"}
-            className={`flex items-center gap-2 px-1 py-3 ${
-              tab.active
-                ? "border-b-2 border-[#ff2e93]"
-                : "border-b-2 border-transparent"
-            }`}
-          >
-            <Icon name={tab.icon} size={18} />
-            <span
-              className={`text-[15px] ${
-                tab.active
-                  ? "font-bold text-white"
-                  : "font-medium text-[#a0a5b5]"
+        {NAV_TABS.map((tab) => {
+          const active =
+            tab.id === "groups"
+              ? isGroupsActive
+              : tab.id === "explore"
+                ? isExploreActive
+                : tab.id === "home" && !isGroupsActive && !isExploreActive;
+          return (
+            <Link
+              key={tab.id}
+              href={tab.href}
+              className={`flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-bold transition-colors ${
+                active
+                  ? "border-[#ff2e93] text-white"
+                  : "border-transparent text-[#626775] hover:text-white"
               }`}
             >
               {tab.label}
-            </span>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </nav>
 
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          className="relative flex size-10 items-center justify-center rounded-[20px] bg-[#2a2d37]"
-          aria-label="Thông báo"
-        >
-          <Icon name="bellDot" size={20} />
-          <span className="absolute right-2.5 top-2.5 size-2">
-            <Icon name="notifDot" size={8} />
-          </span>
-        </button>
-
-        <button
-          type="button"
-          className="flex items-center gap-2 rounded-full bg-[#2a2d37] p-1"
-        >
-          <div className="size-8 rounded-2xl bg-[#c6c6c6]" />
-          <span className="text-[13px] font-semibold text-white">Name</span>
-          <Icon name="chevronDown" size={14} />
-        </button>
-      </div>
+      <HeaderCluster />
     </header>
   );
 }

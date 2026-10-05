@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/ui/Icon";
+import { HeaderLogo } from "@/components/HeaderLogo";
+import { HeaderCluster } from "@/components/HeaderCluster";
+import { useUserMenu } from "@/hooks/useUserMenu";
 
 const secondaryTabs = [
   { label: "Feed", href: "/groups" },
@@ -12,65 +15,56 @@ const secondaryTabs = [
   { label: "Trắc nghiệm", href: "/groups/quiz" },
 ];
 
-const navTabs = [
-  { id: "home", label: "Trang chủ", href: "/" },
-  { id: "explore", label: "Khám phá", href: "/" },
-  { id: "messages", label: "Tin nhắn", href: "/" },
-  { id: "groups", label: "Nhóm", href: "/groups" },
-];
-
+/**
+ * Header for every /groups sub-page (/groups, /groups/radar, /groups/diary,
+ * /groups/vault, /groups/quiz). It mirrors the global Navbar exactly — same
+ * height, border, background, logo block, nav style and right-side icon
+ * cluster — so users never see two different surfaces for the same app.
+ *
+ * The only intentional differences are:
+ *   - a back-arrow next to the logo so the user has a one-click way back
+ *     to the global home.
+ *   - a friend-request shortcut on the right cluster (only when signed in).
+ *   - the centre navigation lists the /groups sub-tabs instead of the
+ *     top-level nav tabs.
+ */
 export function GroupsTopBar() {
   const pathname = usePathname();
+  const { session } = useUserMenu();
 
   return (
-    <header className="flex h-[60px] w-full shrink-0 items-center justify-between border-b border-[#232338] bg-[#0c0c14] px-6">
+    <header
+      className="flex h-[72px] w-full shrink-0 items-center justify-between border-b border-[#242831] bg-[#111317] px-8"
+      data-surface="groups-topbar"
+    >
       <div className="flex items-center gap-4">
         <Link
           href="/"
-          aria-label="Quay lại"
-          className="flex size-8 items-center justify-center rounded-2xl bg-white/5 hover:bg-white/10"
+          aria-label="Quay lại trang chủ"
+          className="flex size-9 items-center justify-center rounded-[18px] bg-[#2a2d37] text-[#a0a5b5] hover:text-white"
+          title="Quay lại trang chủ"
         >
           <Icon name="arrowLeft" size={16} />
         </Link>
 
-        <Link href="/" className="flex items-center gap-2">
-          <div
-            className="flex size-9 items-center justify-center rounded-[18px]"
-            style={{
-              backgroundImage:
-                "linear-gradient(45deg, rgb(255, 46, 147) 25%, rgb(255, 138, 86) 75%)",
-            }}
-          >
-            <Icon name="zap" size={20} />
-          </div>
-          <p className="text-[22px] font-extrabold text-white">
-            Name
-            <span
-              className="bg-clip-text text-transparent"
-              style={{
-                backgroundImage:
-                  "linear-gradient(14deg, rgb(255, 46, 147) 25%, rgb(255, 138, 86) 75%)",
-              }}
-            >
-              App
-            </span>
-          </p>
-        </Link>
+        <HeaderLogo />
       </div>
 
-      <nav className="flex items-center gap-1">
+      <nav className="flex items-center gap-8">
         {secondaryTabs.map((tab) => {
           const active =
             pathname === tab.href ||
-            (tab.href === "/groups" && pathname.startsWith("/groups"));
+            (tab.href === "/groups" && pathname === "/groups");
           return (
             <Link
               key={tab.label}
               href={tab.href}
-              className={`rounded-lg px-4 py-2 text-sm transition-colors ${
+              className={`flex items-center gap-2 px-1 py-3 ${
                 active
-                  ? "bg-[#161629] font-semibold text-[#00f2fe]"
-                  : "font-medium text-[#94a3b8] hover:text-white"
+                  ? "border-b-2 border-[#ff2e93]"
+                  : "border-b-2 border-transparent"
+              } text-sm font-bold transition-colors ${
+                active ? "text-white" : "text-[#626775] hover:text-white"
               }`}
             >
               {tab.label}
@@ -80,30 +74,20 @@ export function GroupsTopBar() {
       </nav>
 
       <div className="flex items-center gap-4">
-        <button
-          type="button"
-          className="relative flex size-9 items-center justify-center rounded-[18px] bg-white/5"
-          aria-label="Thông báo"
-        >
-          <Icon name="bellDot" size={18} />
-          <span className="absolute right-2.5 top-2.5 size-1.5">
-            <Icon name="ellipse" size={6} />
-          </span>
-        </button>
+        {/* Friend request shortcut — only on /groups surfaces */}
+        {session && (
+          <Link
+            href="/friends"
+            className="relative flex size-10 items-center justify-center rounded-[20px] bg-[#2a2d37] text-[#a0a5b5] hover:text-white"
+            aria-label="Lời mời kết bạn"
+            title="Lời mời kết bạn"
+          >
+            <Icon name="heartHandshake" size={20} />
+          </Link>
+        )}
 
-        <div className="flex items-center gap-2.5">
-          <span className="text-sm font-semibold text-[#f1f1f7]">Minh</span>
-          <div className="relative size-8 overflow-hidden rounded-2xl border border-[#232338]">
-            <img
-              src="/assets/avatar-minh.png"
-              alt="Minh"
-              className="size-full object-cover"
-            />
-            <span className="absolute bottom-0 right-0 size-2.5">
-              <Icon name="onlineIndicator" size={10} />
-            </span>
-          </div>
-        </div>
+        {/* Shared right cluster (chat toggle + notification bell + user menu) */}
+        <HeaderCluster />
       </div>
     </header>
   );
