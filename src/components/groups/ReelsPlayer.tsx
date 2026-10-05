@@ -145,10 +145,20 @@ export function ReelsPlayer({
         for (const entry of entries) {
           if (entry.isIntersecting && entry.intersectionRatio > 0.6) {
             const idx = Number((entry.target as HTMLElement).dataset.index ?? "0");
-            setActiveIndex((curr) => {
-              if (curr === idx) return curr;
-              onActiveChangeRef.current?.(itemsRef.current[idx] ?? null);
-              return idx;
+            const nextItem = itemsRef.current[idx] ?? null;
+            // Defer state writes out of the observer callback so we
+            // don't trigger a "setState during render of another
+            // component" warning when the parent (DiscoverMainPanel)
+            // runs its own setState in `onActiveChange`. queueMicrotask
+            // runs after the current event-loop tick but before the
+            // browser paints, so the active slide still updates in
+            // the same frame from the user's perspective.
+            queueMicrotask(() => {
+              setActiveIndex((curr) => {
+                if (curr === idx) return curr;
+                onActiveChangeRef.current?.(nextItem);
+                return idx;
+              });
             });
           }
         }
