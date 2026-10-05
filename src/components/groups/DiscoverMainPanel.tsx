@@ -132,18 +132,6 @@ function LeftSidebar({
         </div>
       </Link>
 
-      {/* ── Stat block ──
-           Shows both the visible-after-filter count and the unfiltered
-           total so the user understands what their filters are doing. */}
-      <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2">
-        <Icon name="playCircle" size={14} className="text-cyan-300" />
-        <span className="text-[11px] text-[#94a3b8]">
-          <span className="font-bold text-white">{itemCount}</span>
-          <span className="mx-1 text-[#475569]">/</span>
-          <span className="text-[#94a3b8]">{totalCount}</span> video
-        </span>
-      </div>
-
       {/* ── Search box + clear button ── */}
       <div className="flex flex-col gap-2">
         <div className="relative">
