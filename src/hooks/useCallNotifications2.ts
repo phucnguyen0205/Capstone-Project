@@ -30,28 +30,36 @@ export function useCallNotifications2() {
   useEffect(() => { isCallerRef.current = isCaller; }, [isCaller]);
   useEffect(() => { currentCallIdRef.current = currentCallId; }, [currentCallId]);
 
+  // Ref để useWebRTC2.onSignal không bị stale closure khi currentCallId đổi.
+  const socketRef = useRef(socket);
+  useEffect(() => {
+    socketRef.current = socket;
+  }, [socket]);
+
   // WebRTC
   const webrtc = useWebRTC2({
     polite: !isCaller,
     iceServers,
     onSignal: (kind, payload) => {
-      if (currentCallId) {
-        socket.sendSignal(currentCallId, kind, payload);
+      const id = currentCallIdRef.current;
+      if (id) {
+        socketRef.current.sendSignal(id, kind, payload);
       }
     },
     onRemoteStream: (stream) => {
       console.log('[CallNotifications] Remote stream received');
     },
     onConnectionStateChange: (state) => {
-      if (state === 'connected' && callStatus === 'connecting') {
+      if (state === 'connected' && callStatusRef.current === 'connecting') {
         setCallStatus('connected');
 
         // Notify server
-        if (currentCallId) {
+        const id = currentCallIdRef.current;
+        if (id) {
           fetch('/api/calls/v2/connected', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ callId: currentCallId }),
+            body: JSON.stringify({ callId: id }),
           }).catch((err) => {
             console.error('[CallNotifications] Failed to notify connected:', err);
           });
@@ -61,6 +69,30 @@ export function useCallNotifications2() {
       }
     },
   });
+
+  // ---- Refs để listeners trong socket không bị re-register khi state đổi ----
+  const webrtcRef = useRef(webrtc);
+  useEffect(() => {
+    webrtcRef.current = webrtc;
+  }, [webrtc]);
+  const callStatusRef = useRef(callStatus);
+  useEffect(() => {
+    callStatusRef.current = callStatus;
+  }, [callStatus]);
+  const handleCallEndRef = useRef<() => void>(() => {});
+  const handleCallEnd = useCallback(() => {
+    webrtc.cleanup();
+    setTimeout(() => {
+      setCallStatus('idle');
+      setCurrentCallId(null);
+      setIncomingCall(null);
+      setOutgoingCall(null);
+      setError(null);
+    }, 2000);
+  }, [webrtc]);
+  useEffect(() => {
+    handleCallEndRef.current = handleCallEnd;
+  }, [handleCallEnd]);
 
   // Load ICE servers
   useEffect(() => {
@@ -77,7 +109,10 @@ export function useCallNotifications2() {
       });
   }, []);
 
-  // Socket event handlers
+  // Socket event handlers — chỉ register MỘT LẦN khi socket ref xuất hiện.
+  // Mọi state bên trong handler phải đọc qua ref (webrtcRef, currentCallIdRef,
+  // isCallerRef, callStatusRef, handleCallEndRef) để tránh stale closure và
+  // tránh phải cleanup/re-register mỗi khi state đổi (gây mất event).
   useEffect(() => {
     const cleanups: (() => void)[] = [];
 
@@ -103,7 +138,7 @@ export function useCallNotifications2() {
           if (isCallerRef.current) {
             console.log('[CallNotifications] Caller creating offer after CONNECTING');
             setTimeout(() => {
-              webrtc.triggerOffer().catch((err) =>
+              webrtcRef.current.triggerOffer().catch((err: any) =>
                 console.error('[CallNotifications] triggerOffer failed:', err)
               );
             }, 300);
@@ -112,14 +147,14 @@ export function useCallNotifications2() {
           setCallStatus('connected');
         } else if (data.call.state === CallState.DECLINED) {
           setCallStatus('declined');
-          handleCallEnd();
+          handleCallEndRef.current();
         } else if (data.call.state === CallState.ENDED) {
           setCallStatus('ended');
-          handleCallEnd();
+          handleCallEndRef.current();
         } else if (data.call.state === CallState.TIMEOUT) {
           setCallStatus('timeout');
           setError('No answer');
-          handleCallEnd();
+          handleCallEndRef.current();
         }
       })
     );
@@ -128,12 +163,13 @@ export function useCallNotifications2() {
     cleanups.push(
       socket.on('call_signal', async (data: { signal: { kind: string; payload: Record<string, any> } }) => {
         console.log('[CallNotifications] Received signal:', data.signal.kind);
+        const w = webrtcRef.current;
 
         // Callee: khởi tạo WebRTC khi nhận offer đầu tiên
-        if (data.signal.kind === 'offer' && !webrtc.localStream) {
+        if (data.signal.kind === 'offer' && !w.localStream) {
           try {
             console.log('[CallNotifications] Initializing WebRTC as callee');
-            await webrtc.initialize();
+            await w.initialize();
           } catch (err) {
             console.error('[CallNotifications] WebRTC init failed:', err);
             setError('Failed to access camera/microphone');
@@ -141,7 +177,7 @@ export function useCallNotifications2() {
           }
         }
 
-        await webrtc.handleSignal(data.signal.kind, data.signal.payload);
+        await w.handleSignal(data.signal.kind, data.signal.payload);
       })
     );
 
@@ -150,25 +186,14 @@ export function useCallNotifications2() {
       socket.on('call_ended', () => {
         console.log('[CallNotifications] Call ended');
         setCallStatus('ended');
-        handleCallEnd();
+        handleCallEndRef.current();
       })
     );
 
     return () => {
       cleanups.forEach((cleanup) => cleanup());
     };
-  }, [socket, webrtc]);
-
-  const handleCallEnd = useCallback(() => {
-    webrtc.cleanup();
-    setTimeout(() => {
-      setCallStatus('idle');
-      setCurrentCallId(null);
-      setIncomingCall(null);
-      setOutgoingCall(null);
-      setError(null);
-    }, 2000);
-  }, [webrtc]);
+  }, [socket]);
 
   const initiateCall = useCallback(
     async (

@@ -26,7 +26,11 @@ export function useCallSocket(options: UseCallSocketOptions = {}) {
       return;
     }
 
-    // Connect to WebSocket namespace
+    // Connect to WebSocket namespace.
+    //
+    // Lưu ý: `io(namespace, opts)` với `path` chỉ định path HTTP socket.io
+    // (mặc định '/socket.io'). Khi `path` trùng với endpoint server đang
+    // listen, client sẽ tự route namespace qua connect-packet.
     const socket = io('/api/ws/calls', {
       path: '/api/socket/io',
       transports: ['websocket', 'polling'],

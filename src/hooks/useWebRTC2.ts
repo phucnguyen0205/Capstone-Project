@@ -27,6 +27,21 @@ export function useWebRTC2(options: UseWebRTC2Options = {}) {
   const ignoreOfferRef = useRef(false);
   const iceBufferRef = useRef<Array<{ candidate: string; sdpMid: string | null; sdpMLineIndex: number | null }>>([]);
 
+  // Refs cho callbacks để tránh stale closure khi peer connection được tạo
+  // trước khi useCallNotifications2 cập nhật callback mới.
+  const onSignalRef = useRef(onSignal);
+  useEffect(() => {
+    onSignalRef.current = onSignal;
+  }, [onSignal]);
+  const onRemoteStreamRef = useRef(onRemoteStream);
+  useEffect(() => {
+    onRemoteStreamRef.current = onRemoteStream;
+  }, [onRemoteStream]);
+  const onConnectionStateChangeRef = useRef(onConnectionStateChange);
+  useEffect(() => {
+    onConnectionStateChangeRef.current = onConnectionStateChange;
+  }, [onConnectionStateChange]);
+
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [connectionState, setConnectionState] = useState<RTCPeerConnectionState | null>(null);
@@ -72,7 +87,7 @@ export function useWebRTC2(options: UseWebRTC2Options = {}) {
         if (event.streams[0]) {
           remoteStreamRef.current = event.streams[0];
           setRemoteStream(event.streams[0]);
-          onRemoteStream?.(event.streams[0]);
+          onRemoteStreamRef.current?.(event.streams[0]);
         }
       };
 
@@ -80,7 +95,7 @@ export function useWebRTC2(options: UseWebRTC2Options = {}) {
       pc.onconnectionstatechange = () => {
         console.log('[WebRTC] Connection state:', pc.connectionState);
         setConnectionState(pc.connectionState);
-        onConnectionStateChange?.(pc.connectionState);
+        onConnectionStateChangeRef.current?.(pc.connectionState);
 
         if (pc.connectionState === 'failed') {
           console.log('[WebRTC] Connection failed, restarting ICE');
@@ -95,8 +110,8 @@ export function useWebRTC2(options: UseWebRTC2Options = {}) {
 
       // ICE candidates
       pc.onicecandidate = (event) => {
-        if (event.candidate && onSignal) {
-          onSignal('ice', {
+        if (event.candidate && onSignalRef.current) {
+          onSignalRef.current('ice', {
             candidate: event.candidate.candidate,
             sdpMid: event.candidate.sdpMid,
             sdpMLineIndex: event.candidate.sdpMLineIndex,
@@ -113,8 +128,8 @@ export function useWebRTC2(options: UseWebRTC2Options = {}) {
           await pc.setLocalDescription();
           const desc = pc.localDescription;
 
-          if (desc && onSignal) {
-            onSignal('offer', {
+          if (desc && onSignalRef.current) {
+            onSignalRef.current('offer', {
               type: desc.type,
               sdp: desc.sdp,
             });
@@ -149,14 +164,14 @@ export function useWebRTC2(options: UseWebRTC2Options = {}) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       const desc = pc.localDescription as RTCSessionDescription | null;
-      if (desc && onSignal) {
-        onSignal('offer', { type: desc.type, sdp: desc.sdp ?? '' });
+      if (desc && onSignalRef.current) {
+        onSignalRef.current('offer', { type: desc.type, sdp: desc.sdp ?? '' });
         console.log('[WebRTC] Manual offer sent');
       }
     } catch (err) {
       console.error('[WebRTC] triggerOffer failed:', err);
     }
-  }, [onSignal]);
+  }, []);
 
   const flushIceBuffer = useCallback(async () => {
     const pc = pcRef.current;
@@ -200,8 +215,8 @@ export function useWebRTC2(options: UseWebRTC2Options = {}) {
           await pc.setLocalDescription();
 
           const desc = pc.localDescription;
-          if (desc && onSignal) {
-            onSignal('answer', {
+          if (desc && onSignalRef.current) {
+            onSignalRef.current('answer', {
               type: desc.type,
               sdp: desc.sdp ?? '',
             });
