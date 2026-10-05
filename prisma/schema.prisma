@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  name          String?
+  username      String    @unique
+  password      String?
+  avatar        String?
+  bio           String?
+  phone         String?   @unique
+  provider      String?   // "credentials" | "google" | "phone"
+  googleId      String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sentMessages         Message[]
+  conversations        ConversationParticipant[]
+  readReceipts         ReadReceipt[]
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  userId         String
+  conversationId String
+  joinedAt       DateTime     @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conversationId])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  content        String
+  mediaUrl       String?
+  mediaType      String?  // "image" | "video" | null
+  senderId       String
+  conversationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sender       User              @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  conversation Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  readBy       ReadReceipt[]
+}
+
+model ReadReceipt {
+  id          String   @id @default(cuid())
+  userId      String
+  messageId   String
+  readAt      DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, messageId])
+}
