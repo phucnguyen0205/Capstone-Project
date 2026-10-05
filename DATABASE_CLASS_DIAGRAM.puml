@@ -1,0 +1,382 @@
+@startuml pulo-database
+
+' ============================================================
+' Pulo — Database class diagram
+' Source: pulo.db (live SQLite) + src/lib/db/schema.ts
+' 28 tables: users, chat, content, groups, vault, diary,
+'            notifications, mirror/closeness, friendships, sessions
+' ============================================================
+
+skinparam classAttributeIconSize 0
+skinparam classFontSize 12
+skinparam packageFontSize 14
+skinparam classBackgroundColor #fafafa
+skinparam classBorderColor #5d6d7e
+hide circle
+
+' ─────────────────── Identity & Account ───────────────────
+package "Identity & Account" {
+    class users {
+        PK id : TEXT
+        UNIQUE email : TEXT
+        UNIQUE username : TEXT
+        password : TEXT
+        name : TEXT
+        avatar : TEXT
+        bio : TEXT
+        last_active_at : INTEGER
+        is_online : INTEGER
+        cover_photo : TEXT
+        birthday : INTEGER
+        location : TEXT
+        website : TEXT
+        phone : TEXT
+        gender : TEXT
+        occupation : TEXT
+        education : TEXT
+        hobbies : TEXT
+        relationship_status : TEXT
+        google_id : TEXT
+        provider : TEXT
+        created_at : INTEGER
+        updated_at : INTEGER
+    }
+
+    class phone_otps {
+        PK id : INTEGER <<autoincrement>>
+        phone : TEXT
+        otp : TEXT
+        created_at : INTEGER
+        expires_at : INTEGER
+    }
+}
+
+' ─────────────────── Social graph ───────────────────
+package "Social graph" {
+    class friendships {
+        PK id : TEXT
+        requester_id : TEXT
+        receiver_id : TEXT
+        status : TEXT  'pending|accepted|rejected
+        created_at : INTEGER
+        updated_at : INTEGER
+    }
+
+    class groups {
+        PK id : TEXT
+        name : TEXT
+        avatar_url : TEXT
+        description : TEXT
+        visibility : TEXT  'public|private
+        creator_id : TEXT
+        created_at : INTEGER
+        updated_at : INTEGER
+    }
+
+    class group_members {
+        PK id : TEXT
+        group_id : TEXT
+        user_id : TEXT
+        role : TEXT  'creator|admin|member
+        joined_at : INTEGER
+    }
+}
+
+' ─────────────────── Content (feed) ───────────────────
+package "Content (feed)" {
+    class posts {
+        PK id : TEXT
+        user_id : TEXT
+        caption : TEXT
+        media_url : TEXT
+        media_type : TEXT
+        public_id : TEXT
+        lens : TEXT  'public|friends|close
+        scope : TEXT
+        created_at : INTEGER
+        media_width : INTEGER
+        media_height : INTEGER
+        moderation_status : TEXT  'pending|approved|rejected
+        moderation_reason : TEXT
+        moderation_score : INTEGER
+        moderated_at : INTEGER
+    }
+
+    class comments {
+        PK id : TEXT
+        user_id : TEXT
+        post_id : TEXT
+        parent_id : TEXT  'self-FK
+        content : TEXT
+        edited : INTEGER
+        deleted_at : INTEGER
+        created_at : INTEGER
+        updated_at : INTEGER
+    }
+
+    class comment_mentions {
+        PK id : TEXT
+        comment_id : TEXT
+        user_id : TEXT
+        username : TEXT
+        created_at : INTEGER
+    }
+
+    class comment_reactions {
+        PK id : TEXT
+        comment_id : TEXT
+        user_id : TEXT
+        emoji : TEXT
+        created_at : INTEGER
+    }
+
+    class comment_shares {
+        PK id : TEXT
+        comment_id : TEXT
+        user_id : TEXT
+        created_at : INTEGER
+    }
+
+    class likes {
+        PK id : TEXT
+        user_id : TEXT
+        post_id : TEXT
+        created_at : INTEGER
+    }
+
+    class saves {
+        PK id : TEXT
+        user_id : TEXT
+        post_id : TEXT
+        created_at : INTEGER
+    }
+
+    class shares {
+        PK id : TEXT
+        post_id : TEXT
+        user_id : TEXT
+        target_type : TEXT  'polymorphic
+        target_id : TEXT
+        created_at : INTEGER
+    }
+}
+
+' ─────────────────── Moderation ───────────────────
+package "Moderation" {
+    class post_hides {
+        PK id : TEXT
+        post_id : TEXT
+        user_id : TEXT
+        scope : TEXT
+        target_user_id : TEXT
+        created_at : INTEGER
+    }
+
+    class post_reports {
+        PK id : TEXT
+        post_id : TEXT
+        reporter_id : TEXT
+        reason : TEXT
+        description : TEXT
+        status : TEXT  'pending|resolved|rejected
+        created_at : INTEGER
+        updated_at : INTEGER
+    }
+
+    class dismissed_authors {
+        PK id : TEXT
+        viewer_id : TEXT
+        author_id : TEXT
+        created_at : INTEGER
+    }
+}
+
+' ─────────────────── Chat ───────────────────
+package "Chat" {
+    class conversations {
+        PK id : TEXT
+        name : TEXT  'NULL = 1-1
+        is_group : INTEGER
+        avatar_url : TEXT
+        created_at : INTEGER
+        updated_at : INTEGER
+    }
+
+    class conversation_participants {
+        PK id : TEXT
+        user_id : TEXT
+        conversation_id : TEXT
+        joined_at : INTEGER
+        role : TEXT  'creator|admin|member
+        nickname : TEXT
+    }
+
+    class messages {
+        PK id : TEXT
+        conversation_id : TEXT
+        sender_id : TEXT
+        content : TEXT
+        media_url : TEXT
+        media_type : TEXT  'image|video|file
+        file_name : TEXT
+        file_size : INTEGER
+        created_at : INTEGER
+        updated_at : INTEGER
+    }
+
+    class read_receipts {
+        PK id : TEXT
+        user_id : TEXT
+        message_id : TEXT
+        read_at : INTEGER
+    }
+}
+
+' ─────────────────── Vault (Hộp bí mật) ───────────────────
+package "Vault" {
+    class vault_notes {
+        PK id : TEXT
+        user_id : TEXT
+        content : TEXT
+        mood : TEXT  'default neutral
+        unlock_points : INTEGER  'NULL = global default
+        visibility : TEXT  'private|shared
+        created_at : INTEGER
+        updated_at : INTEGER
+    }
+
+    class vault_note_visibility {
+        PK id : TEXT
+        note_id : TEXT
+        user_id : TEXT
+        state : TEXT  'allowed|denied
+        mood_filter : TEXT  'comma-sep, NULL = all
+        created_at : INTEGER
+    }
+}
+
+' ─────────────────── Diary ───────────────────
+package "Diary" {
+    class diary_encounters {
+        PK id : TEXT
+        viewer_id : TEXT
+        encountered_id : TEXT
+        picked_at : INTEGER
+        viewed_at : INTEGER
+        dismissed_at : INTEGER
+        note : TEXT
+    }
+}
+
+' ─────────────────── Notifications ───────────────────
+package "Notifications" {
+    class notifications {
+        PK id : TEXT
+        recipient_id : TEXT
+        actor_id : TEXT  'NULL = system
+        type : TEXT
+        title : TEXT
+        body : TEXT
+        data : TEXT  'JSON
+        read : INTEGER  '0|1, NOT NULL
+        read_at : INTEGER
+        created_at : INTEGER
+    }
+}
+
+' ─────────────────── Mirror / Closeness ───────────────────
+package "Mirror / Closeness" {
+    class closeness {
+        PK pair_key : TEXT
+        points : INTEGER
+        streak_days : INTEGER
+        last_activity : INTEGER
+        updated_at : INTEGER
+    }
+
+    class mirror_settings {
+        PK id : TEXT
+        image_full_points : INTEGER  'default 100
+        video_unlock_points : INTEGER  'default 60
+        activity_cap : INTEGER  'default 95
+        streak_bonus_max : INTEGER  'default 5
+        activity_window_days : INTEGER  'default 14
+        updated_at : INTEGER
+    }
+}
+
+' ─────────────────── System ───────────────────
+package "System" {
+    class __drizzle_migrations {
+        PK id : INTEGER
+        hash : TEXT
+        created_at : NUMERIC
+        name : TEXT
+        applied_at : TEXT
+    }
+
+    class test_marker {
+        id : TEXT
+    }
+}
+
+' ─────────────────── Relationships ───────────────────
+' Chat
+users ||--o{ conversation_participants : "joins"
+conversations ||--o{ conversation_participants : "has"
+conversations ||--o{ messages : "contains"
+users ||--o{ messages : "sends"
+users ||--o{ read_receipts : "marks read"
+messages ||--o{ read_receipts : "read by"
+
+' Content
+users ||--o{ posts : "authors"
+users ||--o{ comments : "writes"
+posts ||--o{ comments : "has"
+comments ||--o{ comments : "parent_id"
+users ||--o{ comment_mentions : "mentioned in"
+comments ||--o{ comment_mentions : "mentions"
+users ||--o{ comment_reactions : "reacts"
+comments ||--o{ comment_reactions : "reacted"
+users ||--o{ comment_shares : "shares"
+comments ||--o{ comment_shares : "shared"
+users ||--o{ likes : "likes"
+posts ||--o{ likes : "liked by"
+users ||--o{ saves : "saves"
+posts ||--o{ saves : "saved by"
+users ||--o{ shares : "shares"
+posts ||--o{ shares : "shared as"
+
+' Moderation
+users ||--o{ post_hides : "hides"
+posts ||--o{ post_hides : "hidden from"
+users ||--o{ post_reports : "reports"
+posts ||--o{ post_reports : "reported"
+users ||--o{ dismissed_authors : "viewer"
+users ||--o{ dismissed_authors : "author"
+
+' Social graph
+users ||--o{ friendships : "requests"
+users ||--o{ friendships : "receives"
+users ||--o{ groups : "creates"
+groups ||--o{ group_members : "has"
+users ||--o{ group_members : "member of"
+
+' Groups + posts (junction)
+groups ||--o{ group_posts : "feed"
+posts ||--o{ group_posts : "in groups"
+
+' Vault
+users ||--o{ vault_notes : "owns"
+vault_notes ||--o{ vault_note_visibility : "overrides"
+users ||--o{ vault_note_visibility : "target"
+
+' Diary
+users ||--o{ diary_encounters : "viewer"
+users ||--o{ diary_encounters : "encountered"
+
+' Notifications
+users ||--o{ notifications : "recipient"
+users ||--o{ notifications : "actor"
+
+@enduml
