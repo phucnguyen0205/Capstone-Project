@@ -82,6 +82,16 @@ export async function GET(req: NextRequest) {
         // here so they can preview their upload while it waits in
         // the moderation queue.
         //
+        // NOTE: We deliberately do NOT filter `p.user_id != ?` for
+        // approved videos. The user explicitly asked for "tất cả
+        // các video khả dụng" on the Discover page, which includes
+        // their own already-approved uploads. Earlier revisions
+        // hid them on the explore tab because the recommendation
+        // engine reasoned "you've already seen your own content",
+        // but the user found it confusing — they expected the
+        // Discover feed to be a global view, with the "Của tôi"
+        // tab being the separate "only my stuff" surface.
+        //
         // Wrapped in a subquery because SQLite (better-sqlite3)
         // doesn't accept ORDER BY column-aliases on top of a
         // bare UNION ALL — it requires the ORDER BY + LIMIT to
@@ -94,7 +104,6 @@ export async function GET(req: NextRequest) {
              JOIN users u ON u.id = p.user_id
             WHERE p.media_type = 'video'
               AND p.scope = 'feed'
-              AND p.user_id != ?
               AND p.moderation_status = 'approved'
               AND p.lens != 'private'
               AND p.created_at >= ?
@@ -117,7 +126,6 @@ export async function GET(req: NextRequest) {
          LIMIT ?`,
       )
       .all(
-        myId,
         Math.floor(Date.now() / 1000) - 60 * 24 * 60 * 60, // last 60 days
         myId,
         Math.floor(Date.now() / 1000) - 60 * 24 * 60 * 60,
@@ -214,40 +222,34 @@ export async function GET(req: NextRequest) {
         continue;
       }
       if (row.lens === "friends") {
-        // Explore page: every approved friends-only video is surfaced
-        // as a *locked* teaser even when the viewer isn't friends
-        // with the author. Earlier revisions only added the row when
-        // `friendSet.has(row.user_id)` was true — for a brand-new
-        // user with zero accepted friends that meant the entire
-        // friends-lens cohort was dropped silently and the feed
-        // shrank to the public-only videos. Users with a small
-        // friend graph reported "chỉ thấy 2 video tải lên" because
-        // the missing reels weren't even in the locked deck. The
-        // lock card already explains "Kết bạn để mở khoá" and the
-        // existing ReelSlide renders the LockedReel component for
-        // `locked=true`, so we just need to keep the row in the
-        // list.
+        // Explore page: only surface friends-lens videos that the
+        // viewer can actually watch. Earlier revisions added every
+        // friends-lens row as a locked teaser (so a brand-new user
+        // with no friends would still see *something* in the
+        // deck), but the user said "tôi cần là lấy tất cả các
+        // video khả dụng" — that means *playable* videos, not
+        // "Kết bạn để mở khoá" placeholders that block the swipe.
+        // Drop locked rows here and let the SQL widen with a
+        // future "gated in a separate section" if needed.
         if (friendSet.has(row.user_id)) {
           visible.push(shape(row, false, 0, 0, row.moderation_status));
-        } else {
-          visible.push(shape(row, true, videoUnlock, 0, row.moderation_status));
         }
         continue;
       }
       if (row.lens === "close") {
         if (!friendSet.has(row.user_id)) {
-          // Not even friends — show as a locked teaser. The UI can
-          // decide to render a "Cần kết bạn" gate.
-          visible.push(shape(row, true, videoUnlock, 0, row.moderation_status));
+          // Same rule: skip non-friends close-lens videos entirely
+          // from the explore surface. They never reach a playable
+          // state for the viewer, so showing them as a locked
+          // teaser is just visual noise.
           continue;
         }
         const points = closenessBetween(myId, row.user_id);
         const distance = Math.max(0, videoUnlock - points);
         if (points >= videoUnlock) {
           visible.push(shape(row, false, 0, points, row.moderation_status));
-        } else {
-          visible.push(shape(row, true, distance, points, row.moderation_status));
         }
+        // Drop under-threshold close-lens rows: not yet "khả dụng".
         continue;
       }
     }
