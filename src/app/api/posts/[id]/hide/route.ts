@@ -78,13 +78,13 @@ export async function GET(
 // db.close() removed — DB is now a module-level singleton (src/lib/db/server.ts)
     return NextResponse.json({
       hiddenFromFeed: !!feedRow,
-      hiddenFromUsers: hiddenFromRows.map((u, { headers: corsHeaders }) => ({
+      hiddenFromUsers: hiddenFromRows.map((u) => ({
         id: u.id,
         username: u.username,
         name: u.name,
         avatar: u.avatar,
       })),
-    });
+    }, { headers: corsHeaders });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Lỗi server";
     return NextResponse.json({ error: message }, { status: 500 }, { headers: corsHeaders });
@@ -95,9 +95,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSessionFromRequest(_req);
+  const session = await getSessionFromRequest(req);
   if (!session?.user) {
-    return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 }, { headers: corsHeaders });
+    return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401, headers: corsHeaders });
   }
   const myId = (session.user as any).id;
   const { id: postId } = await params;
@@ -162,9 +162,9 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSessionFromRequest(_req);
+  const session = await getSessionFromRequest(req);
   if (!session?.user) {
-    return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 }, { headers: corsHeaders });
+    return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401, headers: corsHeaders });
   }
   const myId = (session.user as any).id;
   const { id: postId } = await params;
