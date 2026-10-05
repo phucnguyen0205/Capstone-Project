@@ -180,7 +180,7 @@ export function GroupsLeftSidebar({
   const unlockDays = Math.min(Math.max(daysSinceOldest, 1), 30);
 
   return (
-    <aside className="flex min-h-0 w-[360px] shrink-0 flex-col gap-4 overflow-x-hidden overflow-y-auto border-r border-[#232338] p-4">
+    <aside className="flex min-h-0 w-[360px] shrink-0 flex-col gap-4 overflow-x-hidden overflow-y-auto border-r border-[#232338] p-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {/* Search bar lives at the top of column 1 so it's the first
           thing the eye lands on. Filters the "Nhóm của tôi" list below.
           A `+` button next to it opens the CreateGroupModal so users can

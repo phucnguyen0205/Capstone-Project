@@ -108,7 +108,7 @@ export function QuizMainPanel() {
 
   if (step === "result") {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-8">
+      <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="w-full max-w-lg text-center">
           <div className="mb-6 flex size-20 items-center justify-center rounded-full bg-[#ff2e93]/10 mx-auto">
             <Icon name="zap" size={40} className="text-[#ff2e93]" />
@@ -204,7 +204,7 @@ export function QuizMainPanel() {
       </div>
 
       {/* Question */}
-      <div className="flex flex-1 flex-col justify-center overflow-y-auto px-6 py-8">
+      <div className="flex flex-1 flex-col justify-center overflow-y-auto px-6 py-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <h3 className="mb-8 text-center text-xl font-bold text-white">{q.question}</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {q.options.map((opt, idx) => (

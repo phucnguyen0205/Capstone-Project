@@ -64,7 +64,7 @@ export function RadarRightPanel() {
   const newFriends = history.filter((h) => h.type === "join").length;
 
   return (
-    <aside className="w-[320px] shrink-0 overflow-y-auto border-l border-[#16162a]">
+    <aside className="w-[320px] shrink-0 overflow-y-auto border-l border-[#16162a] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {/* Radar Stats */}
       <div className="border-b border-[#16162a] p-6">
         <h3 className="mb-4 text-sm font-semibold text-[#94a3b8]">Thống kê Radar</h3>

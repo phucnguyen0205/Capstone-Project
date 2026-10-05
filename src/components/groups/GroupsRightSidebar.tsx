@@ -140,7 +140,7 @@ export function GroupsRightSidebar({
   }, [loadData, refreshSignal]);
 
   return (
-    <aside className="flex min-h-0 w-[310px] shrink-0 flex-col gap-4 overflow-x-hidden overflow-y-auto border-l border-[#232338] p-4">
+    <aside className="flex min-h-0 w-[310px] shrink-0 flex-col gap-4 overflow-x-hidden overflow-y-auto border-l border-[#232338] p-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <section className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <Icon name="layoutGrid" size={16} />

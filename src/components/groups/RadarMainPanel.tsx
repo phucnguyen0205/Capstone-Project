@@ -614,7 +614,7 @@ function ListView({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="h-full overflow-y-auto px-5 py-3">
+    <div className="h-full overflow-y-auto px-5 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <div className="space-y-2">
         {users.map((u) => (
           <ListCard key={u.id} user={u} onClick={() => onSelect(u.id)} />
@@ -759,7 +759,7 @@ function DetailSheet({ user, onClose }: { user: RadarUser; onClose: () => void }
         </div>
 
         {/* ── Scrollable content ── */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {/* AI Breakdown */}
           <section className="px-5 py-4">
             <p className="mb-2 flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-[#94a3b8]">

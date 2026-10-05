@@ -262,7 +262,7 @@ export function GroupsFeed({
         {/* Scrollable feed — only this region scrolls; toolbar + chips
             stay pinned thanks to the parent's overflow-hidden + the
             scroll region's flex-1 + min-h-0. */}
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto pr-1">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {loading && (
             <div className="flex items-center justify-center py-12">
               <div className="size-8 animate-spin rounded-full border-2 border-[#232338] border-t-[#ff2e93]" />
