@@ -214,8 +214,23 @@ export async function GET(req: NextRequest) {
         continue;
       }
       if (row.lens === "friends") {
+        // Explore page: every approved friends-only video is surfaced
+        // as a *locked* teaser even when the viewer isn't friends
+        // with the author. Earlier revisions only added the row when
+        // `friendSet.has(row.user_id)` was true — for a brand-new
+        // user with zero accepted friends that meant the entire
+        // friends-lens cohort was dropped silently and the feed
+        // shrank to the public-only videos. Users with a small
+        // friend graph reported "chỉ thấy 2 video tải lên" because
+        // the missing reels weren't even in the locked deck. The
+        // lock card already explains "Kết bạn để mở khoá" and the
+        // existing ReelSlide renders the LockedReel component for
+        // `locked=true`, so we just need to keep the row in the
+        // list.
         if (friendSet.has(row.user_id)) {
           visible.push(shape(row, false, 0, 0, row.moderation_status));
+        } else {
+          visible.push(shape(row, true, videoUnlock, 0, row.moderation_status));
         }
         continue;
       }
