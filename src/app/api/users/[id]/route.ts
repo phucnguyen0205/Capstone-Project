@@ -211,10 +211,6 @@ export async function GET(
       education: user.education,
       hobbies: user.hobbies,
       relationshipStatus: user.relationship_status,
-      city: user.city,
-      country: user.country,
-      latitude: user.latitude,
-      longitude: user.longitude,
       createdAt: user.created_at,
       stats: {
         postCount,
@@ -249,8 +245,6 @@ const STRING_FIELDS: Record<string, number> = {
   occupation: 120,
   education: 120,
   hobbies: 240,
-  city: 80,
-  country: 80,
 };
 
 export async function PATCH(
@@ -374,35 +368,6 @@ export async function PATCH(
           { error: "'birthday' phải là số (unix seconds) hoặc null" },
           { status: 400, headers: corsHeaders }
         );
-      }
-    }
-
-    // ── Location coords ────────────────────────────────────────────────────
-    // latitude/longitude are decimal degrees (-90..90 / -180..180). Stored
-    // as REAL so we can do haversine distance queries for the "people
-    // nearby" filter without re-parsing strings.
-    for (const coord of ["latitude", "longitude"] as const) {
-      if (coord in body) {
-        const value = body[coord];
-        if (value === null || value === "") {
-          updates.push(`${coord} = ?`);
-          values.push(null);
-        } else if (typeof value === "number" && Number.isFinite(value)) {
-          const limit = coord === "latitude" ? 90 : 180;
-          if (value < -limit || value > limit) {
-            return NextResponse.json(
-              { error: `'${coord}' phải trong khoảng [-${limit}, ${limit}]` },
-              { status: 400, headers: corsHeaders }
-            );
-          }
-          updates.push(`${coord} = ?`);
-          values.push(value);
-        } else {
-          return NextResponse.json(
-            { error: `'${coord}' phải là số hợp lệ hoặc null` },
-            { status: 400, headers: corsHeaders }
-          );
-        }
       }
     }
 

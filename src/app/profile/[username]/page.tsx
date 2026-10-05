@@ -26,10 +26,6 @@ interface ProfileData {
   education: string | null;
   hobbies: string | null;
   relationshipStatus: string | null;
-  city: string | null;
-  country: string | null;
-  latitude: number | null;
-  longitude: number | null;
   createdAt: number;
   stats: {
     postCount: number;
@@ -155,24 +151,6 @@ function EditProfileModal({
   const [relationshipStatus, setRelationshipStatus] = useState(
     profile.relationshipStatus ?? ""
   );
-  // ── Discover-location fields ──
-  // city/country are free-text (used by Discover → "Gần bên" tab).
-  // latitude/longitude are optional decimal coords for real distance.
-  // We sync them from the profile record but only PATCH them when the
-  // user actually touches the inputs (see `locationDirty` below).
-  const [city, setCity] = useState(profile.city ?? "");
-  const [country, setCountry] = useState(profile.country ?? "");
-  const [latitude, setLatitude] = useState<string>(
-    profile.latitude !== null && profile.latitude !== undefined
-      ? String(profile.latitude)
-      : ""
-  );
-  const [longitude, setLongitude] = useState<string>(
-    profile.longitude !== null && profile.longitude !== undefined
-      ? String(profile.longitude)
-      : ""
-  );
-  const [locationDirty, setLocationDirty] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -250,21 +228,6 @@ function EditProfileModal({
         body.birthday = Math.floor(new Date(birthday).getTime() / 1000);
       } else {
         body.birthday = null;
-      }
-
-      // Only PATCH the Discover-location block when the user has
-      // actually edited one of the inputs. Otherwise we'd be sending
-      // back whatever the server already returned, which is a no-op
-      // for free-text but still adds 4 SQL columns to the UPDATE.
-      if (locationDirty) {
-        body.city = city.trim() || null;
-        body.country = country.trim() || null;
-        // Parse to number or send null when the field is blank.
-        // Using parseFloat is safe because the server validates the
-        // range (-90..90 / -180..180) and the value will be coerced
-        // back to a real on the SQLite side.
-        body.latitude = latitude.trim() === "" ? null : Number(latitude);
-        body.longitude = longitude.trim() === "" ? null : Number(longitude);
       }
 
       const res = await fetch(`/api/users/${profile.id}`, {
@@ -439,72 +402,6 @@ function EditProfileModal({
               className="w-full rounded-lg border border-white/10 bg-[#111317] px-3 py-2 text-sm outline-none focus:border-[#ff2e93]"
             />
           </Field>
-
-          {/* ── Discover location (city/country + lat/lng) ── */}
-          {/* These power the "Gần bên" filter on the Discover page.
-            Users can leave them blank and the API will simply fall
-            back to the country-level match. */}
-          <Field label="Thành phố (cho tab Khám phá)">
-            <input
-              type="text"
-              value={city}
-              maxLength={80}
-              onChange={(e) => {
-                setCity(e.target.value);
-                setLocationDirty(true);
-              }}
-              placeholder="Ví dụ: Hà Nội"
-              className="w-full rounded-lg border border-white/10 bg-[#111317] px-3 py-2 text-sm outline-none focus:border-[#ff2e93]"
-            />
-          </Field>
-          <Field label="Quốc gia">
-            <input
-              type="text"
-              value={country}
-              maxLength={80}
-              onChange={(e) => {
-                setCountry(e.target.value);
-                setLocationDirty(true);
-              }}
-              placeholder="Ví dụ: Việt Nam"
-              className="w-full rounded-lg border border-white/10 bg-[#111317] px-3 py-2 text-sm outline-none focus:border-[#ff2e93]"
-            />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Vĩ độ (latitude)">
-              <input
-                type="number"
-                step="0.000001"
-                min={-90}
-                max={90}
-                value={latitude}
-                onChange={(e) => {
-                  setLatitude(e.target.value);
-                  setLocationDirty(true);
-                }}
-                placeholder="21.0285"
-                className="w-full rounded-lg border border-white/10 bg-[#111317] px-3 py-2 text-sm outline-none focus:border-[#ff2e93]"
-              />
-            </Field>
-            <Field label="Kinh độ (longitude)">
-              <input
-                type="number"
-                step="0.000001"
-                min={-180}
-                max={180}
-                value={longitude}
-                onChange={(e) => {
-                  setLongitude(e.target.value);
-                  setLocationDirty(true);
-                }}
-                placeholder="105.8542"
-                className="w-full rounded-lg border border-white/10 bg-[#111317] px-3 py-2 text-sm outline-none focus:border-[#ff2e93]"
-              />
-            </Field>
-          </div>
-          <p className="-mt-3 text-[11px] text-[#626775]">
-            Tọa độ dùng để tính khoảng cách thực với người dùng khác. Để trống nếu không muốn chia sẻ.
-          </p>
           <Field label="Website">
             <input
               type="url"
