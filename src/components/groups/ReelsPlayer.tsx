@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { SafeAvatar } from "@/components/ui/SafeAvatar";
 import { ReelCommentsPanel } from "@/components/groups/ReelCommentsPanel";
@@ -200,14 +200,22 @@ export function ReelsPlayer({
         className="h-full snap-y snap-mandatory overflow-y-auto bg-black [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item, idx) => (
-          <ReelSlide
+          <MemoReelSlide
             key={item.id}
             item={item}
             index={idx}
             isActive={idx === activeIndex}
             myId={myId}
             onOpenComments={() => setOpenCommentsFor(item)}
-            onUpdated={(next) => updateReel(items, idx, next, setActiveIndex)}
+            onUpdated={() => {
+              // No-op for now: the parent (`DiscoverMainPanel`)
+              // re-derives like/comment counts from the server
+              // response. Earlier revisions called `updateReel`
+              // here which flipped the active index and triggered
+              // the autoplay effect on every keystroke of the
+              // search box → every <video> restarted. The active
+              // index is owned by the IntersectionObserver now.
+            }}
             onUnlocked={(unlocked) => onItemReplaced?.(unlocked)}
             onPlayedEnd={idx === activeIndex ? handleActivePlayedEnd : undefined}
             onPauseChange={idx === activeIndex ? setPausedActive : undefined}
@@ -220,39 +228,17 @@ export function ReelsPlayer({
           postId={openCommentsFor.id}
           onClose={() => setOpenCommentsFor(null)}
           // We don't need the full comment list returned to the
-          // player — the panel mutates counts via a callback.
-          onCountChange={(next) =>
-            updateReel(items, items.findIndex((i) => i.id === openCommentsFor.id), {
-              commentCount: next,
-            }, setActiveIndex)
-          }
+          // player — the panel mutates counts via a callback. The
+          // count update does NOT need to flip the active index; we
+          // just no-op here. (Previously this called `updateReel`
+          // which set the active index to the open comment's
+          // position, triggering autoplay restart on every panel
+          // close.)
+          onCountChange={() => {}}
         />
       )}
     </>
   );
-}
-
-/**
- * Helper that produces a fresh array with one reel updated. We
- * keep this outside the component because the comment panel can
- * close asynchronously and might no longer have access to the
- * latest `items` closure.
- */
-function updateReel(
-  items: ReelItem[],
-  idx: number,
-  patch: Partial<ReelItem>,
-  setActiveIndex: (n: number) => void,
-) {
-  // We intentionally don't render the updated list here; the
-  // panel calls back into the parent so the parent decides how
-  // to splice. This keeps the function side-effect free.
-  setActiveIndex(idx);
-  // (Patch is forwarded by the caller in practice — this helper
-  // exists only to avoid drifting the active index when the user
-  // closes the comment sheet.)
-  void patch;
-  void items;
 }
 
 /* ─── Single Reel Slide ────────────────────────────────────────────────── */
@@ -667,3 +653,27 @@ function LockedReel({
     </div>
   );
 }
+
+/* ─── ReelSlide memo ───────────────────────────────────────────────────
+ * React.memo with a custom equality check. We deliberately compare
+ * only the fields that affect the rendered output (NOT identity
+ * of `item`) so a parent re-render that produces a new `items`
+ * array reference (e.g. typing in the search box on /discover)
+ * doesn't re-render every slide. The <video> DOM element survives
+ * the skip — the browser keeps its decoded buffer and continues
+ * playing instead of re-fetching the media URL.
+ */
+const MemoReelSlide = React.memo(ReelSlide, (prev, next) => {
+  if (prev.index !== next.index) return false;
+  if (prev.isActive !== next.isActive) return false;
+  if (prev.myId !== next.myId) return false;
+  if (prev.item.id !== next.item.id) return false;
+  if (prev.item.mediaUrl !== next.item.mediaUrl) return false;
+  if (prev.item.locked !== next.item.locked) return false;
+  if (prev.item.likeCount !== next.item.likeCount) return false;
+  if (prev.item.likedByMe !== next.item.likedByMe) return false;
+  if (prev.item.commentCount !== next.item.commentCount) return false;
+  if (prev.item.moderationStatus !== next.item.moderationStatus) return false;
+  if (prev.item.author.avatar !== next.item.author.avatar) return false;
+  return true;
+});

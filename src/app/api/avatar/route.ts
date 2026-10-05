@@ -211,8 +211,17 @@ function bumpCloudinary(url: URL): string {
   // If the first segment after `/upload/` looks like a transform
   // (contains `_` or `,`), drop it. Otherwise the URL is already
   // original (no transform segment).
-  const publicIdAndQuery = looksLikeTransform ? afterFirst : rest;
-  return `${prefix}${publicIdAndQuery}`;
+  const stripped = looksLikeTransform ? afterFirst : rest;
+  // Some early uploads were stored as `.heic` (HEIF still image
+  // container). Browsers don't decode HEIC, so a raw proxy would
+  // return a 200 with `image/heic` and the <img> would silently
+  // fail to render. Inject `f_jpg` so Cloudinary transcodes the
+  // source to JPEG on the fly — a tiny extra server hop, but
+  // every browser can render the result.
+  if (/\.heic(\?|$|#)/i.test(stripped)) {
+    return `${prefix}f_jpg/${stripped}`;
+  }
+  return `${prefix}${stripped}`;
 }
 
 function bumpUnsplash(url: URL): string {
