@@ -121,6 +121,22 @@ export function ReelsPlayer({
   // Track which video is the "active" one as the user swipes up/down.
   // We rely on IntersectionObserver rather than scroll-end debounce
   // because the latter feels janky on short reels lists.
+  //
+  // NOTE: We do NOT depend on the `items` array itself — only on its
+  // length. The parent filters/sorts the list on every keystroke and
+  // that would otherwise tear down + re-create the observer, which
+  // in turn remounts the <video> elements and forces the browser to
+  // re-fetch + re-decode the media URL. We snapshot the active item
+  // via a ref so the callback always reads the latest array without
+  // needing it in the dep list.
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+  const onActiveChangeRef = useRef(onActiveChange);
+  useEffect(() => {
+    onActiveChangeRef.current = onActiveChange;
+  }, [onActiveChange]);
   useEffect(() => {
     const root = scrollerRef.current;
     if (!root) return;
@@ -129,8 +145,11 @@ export function ReelsPlayer({
         for (const entry of entries) {
           if (entry.isIntersecting && entry.intersectionRatio > 0.6) {
             const idx = Number((entry.target as HTMLElement).dataset.index ?? "0");
-            setActiveIndex(idx);
-            onActiveChange?.(items[idx] ?? null);
+            setActiveIndex((curr) => {
+              if (curr === idx) return curr;
+              onActiveChangeRef.current?.(itemsRef.current[idx] ?? null);
+              return idx;
+            });
           }
         }
       },
@@ -139,7 +158,11 @@ export function ReelsPlayer({
     const slides = root.querySelectorAll<HTMLElement>("[data-reel-slide]");
     slides.forEach((s) => observer.observe(s));
     return () => observer.disconnect();
-  }, [items.length, items, onActiveChange]);
+    // Depend ONLY on items.length so the observer survives search /
+    // filter re-renders that produce a new array reference but the
+    // same slide set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length]);
 
   if (items.length === 0) {
     return (
@@ -267,9 +290,20 @@ function ReelSlide({
   // Autoplay only the active slide. Inactive slides get
   // programmatically paused to free the decoder and avoid two
   // videos playing at once.
+  //
+  // IMPORTANT: We only restart playback when the `isActive` flag
+  // actually flips, not on every render. If the parent re-renders
+  // us with the same isActive value (e.g. because a sibling's
+  // state changed), we leave the video element alone — otherwise
+  // the browser would re-buffer the entire media URL on every
+  // keystroke of the search box.
+  const isActiveRef = useRef(isActive);
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
+    const wasActive = isActiveRef.current;
+    isActiveRef.current = isActive;
+    if (isActive === wasActive) return;
     if (isActive && !item.locked) {
       v.currentTime = 0;
       const playPromise = v.play();
