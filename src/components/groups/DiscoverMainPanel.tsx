@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { SafeAvatar } from "@/components/ui/SafeAvatar";
 import { useUserMenu } from "@/hooks/useUserMenu";
@@ -9,11 +9,11 @@ import {
   type ReelItem,
 } from "@/components/groups/ReelsPlayer";
 import { ReelCommentsPanel } from "@/components/groups/ReelCommentsPanel";
-import { DiscoverReelEnhancements } from "@/components/groups/DiscoverReelEnhancements";
 import { ReelQuickActions } from "@/components/groups/ReelQuickActions";
 import {
   applyReelFilter,
   searchReels,
+  REEL_FILTERS,
   type ReelFilter,
 } from "@/components/groups/reelEnhancements";
 
@@ -42,16 +42,41 @@ function LeftSidebar({
   myUsername,
   myName,
   itemCount,
+  search,
+  onSearchChange,
+  filter,
+  onFilterChange,
 }: {
   myAvatar: string | null;
   myUsername: string | null;
   myName: string | null;
   itemCount: number;
+  search: string;
+  onSearchChange: (next: string) => void;
+  filter: ReelFilter;
+  onFilterChange: (next: ReelFilter) => void;
 }) {
+  // Local draft so the input feels snappy; debounce into the parent
+  // state (300ms) to avoid re-filtering on every keystroke.
+  const [draft, setDraft] = useState(search);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    setDraft(search);
+  }, [search]);
+  const handleChange = (value: string) => {
+    setDraft(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => onSearchChange(value), 300);
+  };
+  const clear = () => {
+    setDraft("");
+    onSearchChange("");
+  };
+
   return (
-    <aside className="hidden h-full w-[88px] shrink-0 flex-col items-center gap-4 border-r border-white/5 bg-black/40 py-4 lg:flex xl:w-[220px] xl:items-stretch xl:px-4">
-      {/* ── Wide-mode: row with avatar + name + count ── */}
-      <div className="hidden xl:flex xl:items-center xl:gap-3">
+    <aside className="hidden h-full w-[280px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-white/5 bg-black/40 p-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex">
+      {/* ── Profile strip ── */}
+      <div className="flex items-center gap-3">
         <SafeAvatar
           src={myAvatar}
           username={myUsername}
@@ -60,7 +85,7 @@ function LeftSidebar({
           imgClassName="size-full rounded-full object-cover"
           className="size-11 shrink-0 rounded-full ring-2 ring-cyan-400/40"
         />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-bold text-white">
             {myName ?? myUsername ?? "Bạn"}
           </p>
@@ -70,32 +95,71 @@ function LeftSidebar({
         </div>
       </div>
 
-      {/* ── Wide-mode stat block ── */}
-      <div className="hidden xl:flex xl:items-center xl:gap-2 xl:rounded-xl xl:border xl:border-white/5 xl:bg-white/[0.03] xl:px-3 xl:py-2">
+      {/* ── Stat block ── */}
+      <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2">
         <Icon name="playCircle" size={14} className="text-cyan-300" />
         <span className="text-[11px] text-[#94a3b8]">
-          <span className="font-bold text-white">{itemCount}</span>{" "}
-          {itemCount === 1 ? "video" : "video"}
+          <span className="font-bold text-white">{itemCount}</span> video
         </span>
       </div>
 
-      {/* ── Compact mode: avatar only ── */}
-      <SafeAvatar
-        src={myAvatar}
-        username={myUsername}
-        name={myName}
-        alt={myUsername ?? ""}
-        imgClassName="size-full rounded-full object-cover"
-        className="size-11 shrink-0 rounded-full ring-2 ring-cyan-400/40 xl:hidden"
-      />
+      {/* ── Search box ── */}
+      {/* Lives in col 1 so it never overlaps the reels player or
+          right rail. Debounced into parent state. */}
+      <div className="flex flex-col gap-2">
+        <div className="relative">
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#64748b]">
+            <Icon name="search" size={12} />
+          </span>
+          <input
+            type="search"
+            inputMode="search"
+            value={draft}
+            onChange={(e) => handleChange(e.target.value)}
+            placeholder="Tìm caption, tác giả…"
+            className="w-full rounded-full border border-white/10 bg-white/5 py-1.5 pl-7 pr-7 text-[11px] text-white placeholder:text-[#64748b] focus:border-cyan-400/40 focus:outline-none"
+          />
+          {draft && (
+            <button
+              type="button"
+              onClick={clear}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-[#94a3b8] hover:bg-white/10 hover:text-white"
+              aria-label="Xóa tìm kiếm"
+            >
+              <Icon name="xCircle" size={12} />
+            </button>
+          )}
+        </div>
 
-      {/* ── Nav shortcuts ── */}
-      <nav className="mt-2 flex w-full flex-col items-center gap-1 xl:items-stretch">
+        {/* ── Filter chips ── */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {REEL_FILTERS.map((f) => {
+            const active = f.key === filter;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => onFilterChange(f.key)}
+                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold transition-all ${
+                  active
+                    ? "bg-gradient-to-r from-cyan-400 to-violet-400 text-[#0c0918]"
+                    : "border border-white/10 bg-white/5 text-[#94a3b8] hover:text-white"
+                }`}
+              >
+                <Icon name={f.icon} size={10} />
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Nav shortcuts (Tải lên removed per design) ── */}
+      <nav className="flex w-full flex-col gap-1">
         {[
           { label: "Trang chủ", icon: "home" as const },
           { label: "Bạn bè", icon: "users2" as const },
           { label: "Khám phá", icon: "compass" as const, active: true },
-          { label: "Tải lên", icon: "arrowUpRight" as const },
         ].map((it) => (
           <button
             key={it.label}
@@ -108,9 +172,7 @@ function LeftSidebar({
             }`}
           >
             <Icon name={it.icon} size={18} />
-            <span className="hidden text-[12px] font-semibold xl:inline">
-              {it.label}
-            </span>
+            <span className="text-[12px] font-semibold">{it.label}</span>
           </button>
         ))}
       </nav>
@@ -339,27 +401,18 @@ export function DiscoverMainPanel() {
         </div>
       </div>
 
-      {/* ── Discover page upgrades: search + filter chips ── */}
-      {/* Renders BELOW the original tab bar so the original 2-tab
-        switch ("Khám phá" / "Thư viện của bạn") still controls the
-        data source. The new chips filter the result of the active
-        data source. */}
-      <DiscoverReelEnhancements
-        search={search}
-        onSearchChange={setSearch}
-        filter={filter}
-        onFilterChange={setFilter}
-        itemCount={visibleItems.length}
-      />
-
       {/* ── Body: 3-column layout (left sidebar | reels | right rail) */}
       <div className="relative flex min-h-0 flex-1 items-stretch overflow-hidden">
-        {/* ── Col 1: left sidebar ── */}
+        {/* ── Col 1: left sidebar — owns search + filter chips ── */}
         <LeftSidebar
           myAvatar={myAvatar}
           myUsername={myUsername}
           myName={myName}
-          itemCount={items.length}
+          itemCount={visibleItems.length}
+          search={search}
+          onSearchChange={setSearch}
+          filter={filter}
+          onFilterChange={setFilter}
         />
 
         {/* ── Col 2: reels player (video must be centred both
