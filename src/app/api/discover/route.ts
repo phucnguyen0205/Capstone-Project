@@ -9,6 +9,40 @@ export async function OPTIONS() {
 }
 
 /**
+ * Great-circle distance in km between two (lat, lng) pairs. Inputs are
+ * decimal degrees. Result is in kilometres. We use the haversine
+ * formula because Vietnam is wide enough (~1700 km N-S) that the
+ * flat-earth approximation breaks down at city-to-city scale.
+ */
+function haversineKm(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const R = 6371; // Earth radius in km
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/** Human-readable km label, e.g. "0.4 km", "12 km", "1.4k km". */
+function formatKm(km: number): string {
+  if (km < 1) return `${Math.round(km * 10) / 10} km`;
+  if (km < 10) return `${Math.round(km * 10) / 10} km`;
+  if (km < 100) return `${Math.round(km)} km`;
+  if (km < 1000) return `${Math.round(km / 5) * 5} km`;
+  return `${(km / 1000).toFixed(1)}k km`;
+}
+
+/**
  * Facebook-style binary online presence algorithm.
  */
 function computePresence(lastActiveAt: number, isOnline: number, now: number) {
@@ -79,7 +113,8 @@ export async function GET(request: NextRequest) {
 
     // ─── User query ──────────────────────────────────────────────────────
     let query = `SELECT id, username, name, avatar, bio, hobbies, gender,
-                        relationship_status, occupation, created_at, last_active_at, is_online
+                        relationship_status, occupation, created_at, last_active_at, is_online,
+                        city, country, latitude, longitude
                  FROM users`;
     const params: any[] = [];
 
@@ -91,6 +126,45 @@ export async function GET(request: NextRequest) {
       query += (myId ? " AND" : " WHERE");
       query += " (username LIKE ? OR name LIKE ?)";
       params.push(`%${search}%`, `%${search}%`);
+    }
+
+    // ─── New Discover filters ─────────────────────────────────────────────
+    // `filter` accepts one of: all | online | nearby | new
+    //   online — currently online (is_online=1 AND last_active < 5 min)
+    //   nearby — same city as the viewer (falls back to country if the
+    //            viewer hasn't set a city)
+    //   new    — joined within the last 7 days
+    // Default is "all" so existing clients keep working.
+    const filter = (url.searchParams.get("filter") ?? "all").toLowerCase();
+    if (filter === "online") {
+      query += (params.length ? " AND" : " WHERE");
+      query += " is_online = 1 AND (last_active_at IS NULL OR last_active_at >= ?)";
+      params.push(Math.floor(Date.now() / 1000) - 5 * 60);
+    } else if (filter === "new") {
+      query += (params.length ? " AND" : " WHERE");
+      query += " created_at >= ?";
+      params.push(Math.floor(Date.now() / 1000) - 7 * 86400);
+    } else if (filter === "nearby" && myId) {
+      // Read viewer's city/country once so we can match against it.
+      // We do this lazily here (not in the first myProfile SELECT)
+      // because the existing myProfile block only pulls the columns
+      // it cares about — adding more there would be a wider refactor.
+      const viewerRow = db
+        .prepare(`SELECT city, country FROM users WHERE id = ?`)
+        .get(myId) as { city: string | null; country: string | null } | undefined;
+      const viewerCity = viewerRow?.city?.trim() || null;
+      const viewerCountry = viewerRow?.country?.trim() || null;
+      if (viewerCity) {
+        query += (params.length ? " AND" : " WHERE");
+        query += " city = ?";
+        params.push(viewerCity);
+      } else if (viewerCountry) {
+        query += (params.length ? " AND" : " WHERE");
+        query += " country = ?";
+        params.push(viewerCountry);
+      }
+      // If the viewer hasn't set any location, `nearby` degrades to
+      // "all" rather than returning zero results.
     }
 
     query += ` ORDER BY
@@ -119,6 +193,18 @@ export async function GET(request: NextRequest) {
       lastActiveAt: null,
       createdAt: myProfile?.created_at ?? now,
     };
+
+    // Pull viewer coords once so we can compute real haversine distance
+    // instead of returning the placeholder "0.5 km".
+    let myLat: number | null = null;
+    let myLng: number | null = null;
+    if (myId) {
+      const viewerCoords = db
+        .prepare(`SELECT latitude, longitude FROM users WHERE id = ?`)
+        .get(myId) as { latitude: number | null; longitude: number | null } | undefined;
+      myLat = viewerCoords?.latitude ?? null;
+      myLng = viewerCoords?.longitude ?? null;
+    }
 
     // ─── Build profiles + mutual friend counts + AI ranking ──────────────
     // Count mutual friends in parallel
@@ -158,6 +244,14 @@ export async function GET(request: NextRequest) {
         // Compute AI compatibility (Gemini if key present, else rule-based)
         const ranking = await computeCompatibility(myProfileForAI, them);
 
+        // Real haversine distance if both viewer + target have coords,
+        // otherwise fall back to the legacy "0.5 km" placeholder.
+        const distance =
+          myLat !== null && myLng !== null &&
+          typeof u.latitude === "number" && typeof u.longitude === "number"
+            ? formatKm(haversineKm(myLat!, myLng!, u.latitude, u.longitude))
+            : "0.5 km";
+
         return {
           id: u.id,
           name: u.name ?? u.username,
@@ -169,7 +263,7 @@ export async function GET(request: NextRequest) {
           compatibilityTier: ranking.tier,
           compatibilityBreakdown: ranking.breakdown,
           compatibilityReasons: ranking.reasons,
-          distance: "0.5 km",
+          distance,
           online: presence.isOnline,
           presenceCode: presence.code,
           presenceLabel: presence.label,
@@ -180,6 +274,8 @@ export async function GET(request: NextRequest) {
           hobbies: u.hobbies ?? null,
           occupation: u.occupation ?? null,
           aiMethod: ranking.method,
+          city: u.city ?? null,
+          country: u.country ?? null,
         };
       })
     );
