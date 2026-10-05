@@ -221,9 +221,14 @@ export async function GET(
 
 // db.close() removed — DB is now a module-level singleton (src/lib/db/server.ts)
 
-    // Transform Cloudinary URLs for browser compatibility (heic→webp, mov→mp4)
+    // Transform Cloudinary URLs for browser compatibility. Only inject
+// transforms for IMAGES — videos already come through with the right
+// codec from the upload step, and re-injecting `f_auto` here can cause
+// Cloudinary to return a `.heic` payload (browser can't decode, video
+// element retries → "video load lâu"). See commit message for context.
+    const isVideo = row.media_type === "video";
     let mediaUrl = row.media_url;
-    if (mediaUrl && typeof mediaUrl === "string") {
+    if (mediaUrl && typeof mediaUrl === "string" && !isVideo) {
       const match = mediaUrl.match(/^(https:\/\/res\.cloudinary\.com\/[^/]+\/(image|video)\/upload\/)(.+)$/);
       if (match) {
         const basePath = match[1];

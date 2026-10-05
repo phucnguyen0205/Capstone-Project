@@ -149,9 +149,14 @@ export async function GET(
         }
       }
       
-      // Transform Cloudinary URLs for browser compatibility
+      // Transform Cloudinary URLs for browser compatibility. Only inject
+// transforms for IMAGES — videos already come through with the right
+// codec from the upload step, and re-injecting `f_auto` here can cause
+// Cloudinary to return a `.heic` payload (browser can't decode, video
+// element retries → "video load lâu"). See commit message for context.
+      const isVideo = p.media_type === "video";
       let mediaUrl = p.media_url;
-      if (mediaUrl && typeof mediaUrl === "string") {
+      if (mediaUrl && typeof mediaUrl === "string" && !isVideo) {
         const match = mediaUrl.match(/^(https:\/\/res\.cloudinary\.com\/[^/]+\/(image|video)\/upload\/)(.+)$/);
         if (match) {
           const basePath = match[1];

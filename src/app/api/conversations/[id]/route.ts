@@ -26,29 +26,44 @@ export async function PATCH(
 ) {
   const me = await getCurrentUser(request);
   if (!me) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 }, { headers: corsHeaders });
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401, headers: corsHeaders }
+    );
   }
 
   const { id: conversationId } = await params;
   const body = (await request.json().catch(() => ({}))) as { name?: string };
 
   if (typeof body.name !== "string") {
-    return NextResponse.json({ error: "Thiếu tên cuộc trò chuyện" }, { status: 400 }, { headers: corsHeaders });
+    return NextResponse.json(
+      { error: "Thiếu tên cuộc trò chuyện" },
+      { status: 400, headers: corsHeaders }
+    );
   }
 
   const trimmed = body.name.trim();
   if (!trimmed) {
-    return NextResponse.json({ error: "Tên không được để trống" }, { status: 400 }, { headers: corsHeaders });
+    return NextResponse.json(
+      { error: "Tên không được để trống" },
+      { status: 400, headers: corsHeaders }
+    );
   }
   if (trimmed.length > 60) {
-    return NextResponse.json({ error: "Tên tối đa 60 ký tự" }, { status: 400 }, { headers: corsHeaders });
+    return NextResponse.json(
+      { error: "Tên tối đa 60 ký tự" },
+      { status: 400, headers: corsHeaders }
+    );
   }
 
   // Verify the caller is an admin/creator of the group. Any member can
   // still chat, but renaming is an admin-only operation.
   const adminErr = await assertAdmin(me.id, conversationId);
   if (adminErr) {
-    return NextResponse.json(adminErr, { status: adminErr.status, headers: corsHeaders });
+    return NextResponse.json(
+      adminErr,
+      { status: adminErr.status, headers: corsHeaders }
+    );
   }
 
   const now = new Date();
@@ -75,7 +90,10 @@ export async function DELETE(
 ) {
   const me = await getCurrentUser(request);
   if (!me) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 }, { headers: corsHeaders });
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401, headers: corsHeaders }
+    );
   }
 
   const { id: conversationId } = await params;
@@ -93,7 +111,10 @@ export async function DELETE(
     .limit(1);
 
   if (participant.length === 0) {
-    return NextResponse.json({ error: "Không có quyền" }, { status: 403 }, { headers: corsHeaders });
+    return NextResponse.json(
+      { error: "Không có quyền" },
+      { status: 403, headers: corsHeaders }
+    );
   }
 
   await db

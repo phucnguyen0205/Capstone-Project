@@ -21,7 +21,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const me = await getCurrentUser(request);
-  if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 }, { headers: corsHeaders });
+  if (!me) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401, headers: corsHeaders }
+    );
+  }
 
   const { id: messageId } = await params;
 
@@ -33,15 +38,18 @@ export async function DELETE(
     .limit(1);
 
   if (!msg) {
-    return NextResponse.json({ error: "Không tìm thấy tin nhắn" }, { status: 404 }, { headers: corsHeaders });
+    return NextResponse.json(
+      { error: "Không tìm thấy tin nhắn" },
+      { status: 404, headers: corsHeaders }
+    );
   }
 
   // Only the sender may delete their own message
   if (msg.senderId !== me.id) {
     return NextResponse.json(
       { error: "Bạn chỉ có thể xoá tin nhắn của chính mình" },
-      { status: 403 }
-    , { headers: corsHeaders });
+      { status: 403, headers: corsHeaders }
+    );
   }
 
   // Verify caller is still a participant of the conversation
@@ -56,11 +64,14 @@ export async function DELETE(
     )
     .limit(1);
   if (participant.length === 0) {
-    return NextResponse.json({ error: "Không có quyền" }, { status: 403 }, { headers: corsHeaders });
+    return NextResponse.json(
+      { error: "Không có quyền" },
+      { status: 403, headers: corsHeaders }
+    );
   }
 
   // Hard delete — chat messages are ephemeral and there is no audit log requirement
   await db.delete(messages).where(eq(messages.id, messageId));
 
-  return new NextResponse(null, { status: 204 });
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
 }

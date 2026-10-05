@@ -99,9 +99,14 @@ export async function GET(
       const delta = Math.max(0, now - lastActive);
       const effectivelyOnline = !!r.is_online && delta < 5 * 60;
       
-      // Transform Cloudinary URLs to web-friendly formats (heic→webp, mov→mp4)
+      // Transform Cloudinary URLs to web-friendly formats. We only inject
+// transforms for IMAGES — videos already come through with the right
+// codec from the upload step, and re-injecting `f_auto` here can cause
+// Cloudinary to return a `.heic` payload (browser can't decode, video
+// element retries → "video load lâu"). See commit message for context.
+      const isVideo = (r.media_type ?? "").startsWith("video");
       let transformedUrl = r.media_url;
-      if (r.media_url) {
+      if (r.media_url && !isVideo) {
         const match = r.media_url.match(/^(https:\/\/res\.cloudinary\.com\/[^/]+\/(image|video)\/upload\/)(.+)$/);
         if (match) {
           const basePath = match[1];

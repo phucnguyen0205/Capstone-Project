@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
     if (otherIds.length < 2) {
       return NextResponse.json(
         { error: "Cần ít nhất 2 người khác để tạo nhóm" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
     if (existing.length !== otherIds.length) {
       return NextResponse.json(
         { error: "Có thành viên không tồn tại" },
-        { status: 404 }
+        { status: 404, headers: corsHeaders }
       );
     }
 
@@ -209,7 +209,10 @@ export async function POST(req: NextRequest) {
 
   // ─── 1-1 chat (legacy) ────────────────────────────────────────────────
   if (!participantId) {
-    return NextResponse.json({ error: "Thiếu participantId" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Thiếu participantId" },
+      { status: 400, headers: corsHeaders }
+    );
   }
 
   // Tìm cuộc trò chuyện hiện có giữa 2 người

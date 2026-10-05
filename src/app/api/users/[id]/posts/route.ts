@@ -95,8 +95,11 @@ export async function GET(
           const isVideo = p.media_type?.startsWith("video");
           
           if (isVideo) {
-            // Inject video transforms: f_auto converts .mov to .mp4
-            transformedUrl = `${basePath}f_auto,q_auto/${tail}`;
+            // Don't transform — we used to inject `f_auto,q_auto` here
+            // to convert `.mov` → `.mp4`, but on Cloudinary that
+            // sometimes returns `.heic` for HEIC-encoded uploads
+            // (browser can't decode it, video element retries).
+            // Just pass the original URL.
           } else {
             // Inject image transforms: f_auto converts .heic to browser-supported format
             transformedUrl = `${basePath}f_auto,q_auto/${tail}`;
